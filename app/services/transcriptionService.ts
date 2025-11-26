@@ -77,6 +77,56 @@ export class TranscriptionService {
     }
 
     /**
+     * ノイズとフィラーをフィルタリング
+     * 短いフィラーは削除し、長い発声（「あーあーあー」など）は残す
+     */
+    private filterNoise(text: string): string {
+        // 短いフィラーパターン（1-2文字の「えー」「あー」など）
+        const short_fillers = [
+            /^えー$/,
+            /^あー$/,
+            /^うー$/,
+            /^んー$/,
+            /^え$/,
+            /^あ$/,
+            /^う$/,
+            /^ん$/
+        ]
+
+        // 文を分割して処理
+        const sentences = text.split(/[。、\n]/).filter((s) => s.trim())
+
+        const filtered_sentences = sentences.filter((sentence) => {
+            const trimmed = sentence.trim()
+
+            // 短いフィラーのみの文は削除
+            for (const pattern of short_fillers) {
+                if (pattern.test(trimmed)) {
+                    return false
+                }
+            }
+
+            // 3文字以上の「あーあーあー」のような長い発声は残す
+            if (trimmed.length >= 3) {
+                return true
+            }
+
+            // その他の短い文は内容を確認
+            // 意味のある単語が含まれている場合は残す
+            const meaningful_patterns = [
+                /[あ-ん]{2,}/, // 2文字以上のひらがな
+                /[ア-ン]{2,}/, // 2文字以上のカタカナ
+                /[一-龯]/, // 漢字
+                /[a-zA-Z]{2,}/ // 2文字以上のアルファベット
+            ]
+
+            return meaningful_patterns.some((pattern) => pattern.test(trimmed))
+        })
+
+        return filtered_sentences.join("。").trim()
+    }
+
+    /**
      * タイムスタンプをフォーマット（mm:ss）
      */
     private formatTimestamp(ms: number): string {
@@ -96,11 +146,22 @@ export class TranscriptionService {
 
         const file_stream = fs.createReadStream(audio_path)
 
+        // 文字起こしプロンプト（ノイズ処理と品質向上）
+        const prompt = `これは日本語の会話の音声です。以下のルールに従って文字起こししてください：
+
+- 短いフィラー（「えー」「あー」「うーん」など）は無視してください
+- 背景ノイズや無意味な音は文字起こししないでください
+- ただし、「あーあーあー」のように長く続く発声は、そのまま文字起こししてください
+- 会話の内容を正確に文字起こししてください
+- 句読点は適切に使用してください
+- 話し言葉の特徴（「ですよね」「みたいな」など）はそのまま残してください`
+
         const response = await this.openai.audio.transcriptions.create({
             file: file_stream,
             model: "whisper-1",
             language: "ja",
-            response_format: "text"
+            response_format: "text",
+            prompt: prompt
         })
 
         return response as string
@@ -157,7 +218,8 @@ export class TranscriptionService {
             }
 
             try {
-                const text = await this.transcribeAudio(file_to_transcribe)
+                let text = await this.transcribeAudio(file_to_transcribe)
+                text = this.filterNoise(text)
 
                 if (text.trim()) {
                     const participant = participants[segment.user_id]
