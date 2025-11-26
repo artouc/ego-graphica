@@ -50,5 +50,32 @@ export const messages = {
         connected: "✅ ボイスチャンネルに接続しました",
         disconnecting: "🔌 ボイスチャンネルから切断中...",
         disconnected: "✅ ボイスチャンネルから切断しました"
+    },
+
+    upload: {
+        // アップロード開始
+        starting: "📤 録音データをアップロード中...",
+        converting: "🔄 音声ファイルをMP3に変換中...",
+        convertingProgress: (current: number, total: number) =>
+            `🔄 MP3変換中... (${current}/${total})`,
+        uploading: "☁️ Firebase Storageにアップロード中...",
+        uploadingProgress: (current: number, total: number, percent: number) =>
+            `☁️ アップロード中... ${current}/${total} (${percent}%)`,
+
+        // アップロード完了
+        completed: (duration: string, file_count: number, total_size: string) =>
+            `✅ **アップロード完了**\n⏱️ 処理時間: ${duration}\n📦 ファイル数: ${file_count}\n💾 合計サイズ: ${total_size}`,
+        downloadLinks: "🔗 **ダウンロードリンク**",
+        linksExpire: (days: number) => `⚠️ リンクは${days}日間有効です`,
+
+        // エラー
+        failed: (error: string) => `❌ アップロードに失敗しました: ${error}`,
+        convertFailed: (error: string) => `❌ MP3変換に失敗しました: ${error}`,
+        firebaseNotConfigured:
+            "⚠️ Firebase Storage が設定されていません。録音ファイルはローカルに保存されます。",
+
+        // ファイル情報
+        audioFiles: "🎵 音声ファイル",
+        metadata: "📋 メタデータ"
     }
 }

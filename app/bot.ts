@@ -11,6 +11,7 @@ import {
 import { appConfig } from "./env"
 import { messages } from "./messages"
 import { RecordingManager } from "./voice/RecordingManager"
+import { StorageService } from "./services/storageService"
 
 /**
  * Bot クラス
@@ -19,6 +20,7 @@ import { RecordingManager } from "./voice/RecordingManager"
 export class Bot {
     private client: Client
     private recording_managers = new Map<string, RecordingManager>()
+    private storage_service: StorageService
 
     constructor() {
         this.client = new Client({
@@ -30,6 +32,7 @@ export class Bot {
             ]
         })
 
+        this.storage_service = new StorageService()
         this.setupEventHandlers()
     }
 
@@ -173,11 +176,13 @@ export class Bot {
         await interaction.deferReply()
 
         try {
+            // 録音を停止
             const summary = await manager.stop()
             this.recording_managers.delete(interaction.guildId)
 
             const duration_str = this.formatDuration(summary.duration)
 
+            // 録音停止メッセージ
             await interaction.editReply({
                 content:
                     messages.recording.stopped(duration_str, summary.participant_count) +
@@ -186,6 +191,109 @@ export class Bot {
             })
 
             console.log(`⏹️ 録音停止: Guild ${interaction.guildId}`)
+
+            // Firebase Storage が設定されていない場合は終了
+            if (!this.storage_service.isConfigured()) {
+                await interaction.followUp({
+                    content: messages.upload.firebaseNotConfigured,
+                    ephemeral: true
+                })
+                return
+            }
+
+            // アップロード開始メッセージ
+            const upload_message = await interaction.followUp({
+                content: messages.upload.starting
+            })
+
+            try {
+                // WAV → MP3 変換
+                await upload_message.edit({
+                    content: messages.upload.converting
+                })
+
+                const mp3_paths = await this.storage_service.convertAllToMp3(
+                    summary.directory,
+                    (current, total) => {
+                        upload_message
+                            .edit({
+                                content: messages.upload.convertingProgress(current, total)
+                            })
+                            .catch(() => {
+                                // メッセージ編集エラーは無視
+                            })
+                    }
+                )
+
+                console.log(`✅ ${mp3_paths.length} ファイルをMP3に変換しました`)
+
+                // Firebase Storageにアップロード
+                await upload_message.edit({
+                    content: messages.upload.uploading
+                })
+
+                const upload_result = await this.storage_service.uploadRecording(
+                    summary.directory,
+                    (current, total, percent) => {
+                        upload_message
+                            .edit({
+                                content: messages.upload.uploadingProgress(current, total, percent)
+                            })
+                            .catch(() => {
+                                // メッセージ編集エラーは無視
+                            })
+                    }
+                )
+
+                // アップロード完了メッセージ
+                const upload_duration = this.storage_service.formatDuration(
+                    upload_result.duration_ms
+                )
+                const total_size = this.storage_service.formatBytes(upload_result.total_size)
+                const file_count = upload_result.audio_files.length
+
+                let completion_message =
+                    messages.upload.completed(upload_duration, file_count, total_size) +
+                    "\n\n" +
+                    messages.upload.downloadLinks +
+                    "\n"
+
+                // 音声ファイルのリンク
+                if (upload_result.audio_files.length > 0) {
+                    completion_message += `\n**${messages.upload.audioFiles}**\n`
+                    for (const file of upload_result.audio_files.slice(0, 10)) {
+                        // 最大10個まで
+                        completion_message += `• [${file.name}](${file.url})\n`
+                    }
+                    if (upload_result.audio_files.length > 10) {
+                        completion_message += `...他 ${upload_result.audio_files.length - 10} ファイル\n`
+                    }
+                }
+
+                // メタデータのリンク
+                if (upload_result.metadata_files.length > 0) {
+                    completion_message += `\n**${messages.upload.metadata}**\n`
+                    for (const file of upload_result.metadata_files) {
+                        completion_message += `• [${file.name}](${file.url})\n`
+                    }
+                }
+
+                completion_message += `\n${messages.upload.linksExpire(7)}`
+
+                await upload_message.edit({
+                    content: completion_message
+                })
+
+                console.log(`✅ アップロード完了: ${file_count} ファイル (${total_size})`)
+            } catch (upload_error) {
+                console.error("アップロードエラー:", upload_error)
+                const error_msg =
+                    upload_error instanceof Error ? upload_error.message : "不明なエラー"
+
+                await upload_message.edit({
+                    content: messages.upload.failed(error_msg)
+                })
+            }
         } catch (error) {
             console.error("録音停止エラー:", error)
             const error_message = error instanceof Error ? error.message : "不明なエラー"
