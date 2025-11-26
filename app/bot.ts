@@ -12,6 +12,7 @@ import { appConfig } from "./env"
 import { messages } from "./messages"
 import { RecordingManager } from "./voice/RecordingManager"
 import { StorageService } from "./services/storageService"
+import { TranscriptionService } from "./services/transcriptionService"
 
 /**
  * Bot クラス
@@ -21,6 +22,7 @@ export class Bot {
     private client: Client
     private recording_managers = new Map<string, RecordingManager>()
     private storage_service: StorageService
+    private transcription_service: TranscriptionService
 
     constructor() {
         this.client = new Client({
@@ -33,6 +35,7 @@ export class Bot {
         })
 
         this.storage_service = new StorageService()
+        this.transcription_service = new TranscriptionService()
         this.setupEventHandlers()
     }
 
@@ -227,6 +230,53 @@ export class Bot {
 
                 console.log(`✅ ${mp3_paths.length} ファイルをMP3に変換しました`)
 
+                // 文字起こし
+                let transcription_result = null
+                if (this.transcription_service.isConfigured()) {
+                    try {
+                        await upload_message.edit({
+                            content: messages.transcription.starting
+                        })
+
+                        transcription_result = await this.transcription_service.transcribeRecording(
+                            summary.directory,
+                            (current, total) => {
+                                upload_message
+                                    .edit({
+                                        content: messages.transcription.processing(current, total)
+                                    })
+                                    .catch(() => {
+                                        // メッセージ編集エラーは無視
+                                    })
+                            }
+                        )
+
+                        const transcription_duration = this.transcription_service.formatDuration(
+                            transcription_result.duration_ms
+                        )
+
+                        console.log(
+                            `✅ 文字起こし完了: ${transcription_result.character_count} 文字 (${transcription_duration})`
+                        )
+                    } catch (transcription_error) {
+                        console.error("文字起こしエラー:", transcription_error)
+                        const error_msg =
+                            transcription_error instanceof Error
+                                ? transcription_error.message
+                                : "不明なエラー"
+                        await interaction.followUp({
+                            content: messages.transcription.failed(error_msg),
+                            ephemeral: true
+                        })
+                        // エラーがあってもアップロードは続行
+                    }
+                } else {
+                    await interaction.followUp({
+                        content: messages.transcription.notConfigured,
+                        ephemeral: true
+                    })
+                }
+
                 // Firebase Storageにアップロード
                 await upload_message.edit({
                     content: messages.upload.uploading
@@ -279,6 +329,16 @@ export class Bot {
                 }
 
                 completion_message += `\n${messages.upload.linksExpire(7)}`
+
+                // 文字起こしプレビューを追加
+                if (transcription_result && transcription_result.transcript) {
+                    const preview =
+                        transcription_result.transcript.length > 500
+                            ? transcription_result.transcript.substring(0, 500) + "..."
+                            : transcription_result.transcript
+
+                    completion_message += `\n\n${messages.transcription.preview}\n\`\`\`\n${preview}\n\`\`\``
+                }
 
                 await upload_message.edit({
                     content: completion_message

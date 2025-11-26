@@ -77,5 +77,22 @@ export const messages = {
         // ファイル情報
         audioFiles: "🎵 音声ファイル",
         metadata: "📋 メタデータ"
+    },
+
+    transcription: {
+        // 文字起こし開始
+        starting: "📝 文字起こしを開始しています...",
+        processing: (current: number, total: number) => `📝 文字起こし中... (${current}/${total})`,
+        generating: "✍️ 会話形式のテキストを生成中...",
+
+        // 完了
+        completed: (duration: string, total_chars: number) =>
+            `✅ **文字起こし完了**\n⏱️ 処理時間: ${duration}\n📄 文字数: ${total_chars.toLocaleString()}`,
+        preview: "📄 **プレビュー** (最初の500文字)",
+
+        // エラー
+        failed: (error: string) => `❌ 文字起こしに失敗しました: ${error}`,
+        notConfigured: "⚠️ OpenAI API が設定されていません。文字起こしはスキップされます。",
+        disabled: "ℹ️ 文字起こし機能は無効化されています。"
     }
 }

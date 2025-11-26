@@ -18,6 +18,11 @@ const envSchema = z.object({
     FIREBASE_CLIENT_EMAIL: z.string().optional(),
     FIREBASE_STORAGE_BUCKET: z.string().optional(),
 
+    // OpenAI
+    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+    TRANSCRIPTION_ENABLED: z.string().default("true"),
+
     DATA_DIR: z.string().default(path.join(process.cwd(), "var", "data")),
     TIMEZONE: z.string().default("Asia/Tokyo"),
 
@@ -79,6 +84,11 @@ export const appConfig = {
         privateKey: env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
         clientEmail: env.FIREBASE_CLIENT_EMAIL,
         storageBucket: env.FIREBASE_STORAGE_BUCKET
+    },
+    openai: {
+        apiKey: env.OPENAI_API_KEY,
+        model: env.OPENAI_MODEL || "gpt-4o-mini",
+        transcriptionEnabled: env.TRANSCRIPTION_ENABLED === "true"
     },
     recording: {
         afterSilenceMs: parseInt(env.AFTER_SILENCE_MS || "800", 10),
