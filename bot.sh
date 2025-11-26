@@ -38,7 +38,8 @@ log_error() {
 # PIDが実行中かチェック
 is_running() {
     if [ -f "$PID_FILE" ]; then
-        local pid=$(cat "$PID_FILE")
+        local pid
+        pid=$(cat "$PID_FILE")
         if ps -p "$pid" > /dev/null 2>&1; then
             return 0
         else
@@ -97,7 +98,9 @@ build() {
 # 起動
 start() {
     if is_running; then
-        log_warning "Bot はすでに起動しています (PID: $(cat $PID_FILE))"
+        local pid
+        pid=$(cat "$PID_FILE")
+        log_warning "Bot はすでに起動しています (PID: $pid)"
         exit 1
     fi
     
@@ -121,7 +124,7 @@ start() {
     # Botをバックグラウンドで起動
     nohup node dist/index.js >> "$LOG_FILE" 2>> "$ERROR_LOG_FILE" &
     local pid=$!
-    echo $pid > "$PID_FILE"
+    echo "$pid" > "$PID_FILE"
     
     # 起動確認（2秒待機）
     sleep 2
@@ -143,7 +146,8 @@ stop() {
         exit 1
     fi
     
-    local pid=$(cat "$PID_FILE")
+    local pid
+    pid=$(cat "$PID_FILE")
     log_info "Bot を停止しています (PID: $pid)..."
     
     # SIGTERM を送信
@@ -182,12 +186,13 @@ restart() {
 # ステータス確認
 status() {
     if is_running; then
-        local pid=$(cat "$PID_FILE")
+        local pid
+        pid=$(cat "$PID_FILE")
         log_success "Bot は起動中です (PID: $pid)"
         
         # プロセス情報を表示
         echo ""
-        ps -p "$pid" -o pid,ppid,etime,cmd
+        ps -p "$pid" -o pid,ppid,etime,command
         
         # ログの最後の10行を表示
         if [ -f "$LOG_FILE" ]; then

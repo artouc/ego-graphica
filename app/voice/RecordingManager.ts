@@ -86,6 +86,10 @@ export class RecordingManager {
         this.start_time = timestamp
         this.is_recording = true
 
+        console.log(
+            `🔌 ボイスチャンネルに接続中... (Channel: ${this.channel.id}, Guild: ${this.guild_id})`
+        )
+
         // ボイスチャンネルに接続
         this.connection = joinVoiceChannel({
             channelId: this.channel.id,
@@ -96,11 +100,40 @@ export class RecordingManager {
             selfMute: true
         })
 
+        // 接続状態の監視
+        this.connection.on("stateChange", (old_state, new_state) => {
+            console.log(
+                `🔌 接続状態変更: ${old_state.status} → ${new_state.status} (${new_state.status})`
+            )
+        })
+
+        this.connection.on("error", (error) => {
+            console.error("❌ ボイス接続エラー:", error)
+        })
+
         try {
+            console.log("⏳ Ready状態を待機中...")
             await entersState(this.connection, VoiceConnectionStatus.Ready, 30_000)
+            console.log("✅ ボイスチャンネルに接続しました")
         } catch (error) {
-            this.connection.destroy()
-            throw new Error("ボイスチャンネルへの接続がタイムアウトしました")
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error("❌ 接続タイムアウト:", error_message)
+            console.error("接続状態:", this.connection.state.status)
+
+            if (this.connection) {
+                this.connection.destroy()
+            }
+
+            throw new Error(
+                `ボイスチャンネルへの接続がタイムアウトしました。\n` +
+                    `エラー: ${error_message}\n` +
+                    `状態: ${this.connection?.state.status || "不明"}\n\n` +
+                    `確認事項:\n` +
+                    `1. Botに「接続」「発言」「音声検出を使用」の権限があるか\n` +
+                    `2. Botがサーバーに正しく招待されているか\n` +
+                    `3. ボイスチャンネルが利用可能か\n` +
+                    `4. Botが他のボイスチャンネルに接続していないか`
+            )
         }
 
         // 音声受信の開始

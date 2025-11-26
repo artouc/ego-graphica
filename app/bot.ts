@@ -43,6 +43,7 @@ export class Bot {
      * イベントハンドラーのセットアップ
      */
     private setupEventHandlers() {
+        // discord.js v15対応: clientReadyを使用
         this.client.once("ready", () => {
             console.log(messages.bot.ready(this.client.user?.tag || "Bot"))
         })
