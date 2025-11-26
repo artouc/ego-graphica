@@ -312,31 +312,16 @@ export class Bot {
                 // 基本メッセージを構築
                 let completion_message =
                     messages.upload.completed(upload_duration, file_count, total_size) +
-                    "\n\n" +
-                    messages.upload.downloadLinks +
-                    "\n"
+                    "\n\n"
 
-                // 音声ファイルのリンクファイルのリンク（最大5個まで）
-                if (upload_result.audio_files.length > 0) {
-                    completion_message += `\n**${messages.upload.audioFiles}**\n`
-                    const max_links = 5
-                    for (const file of upload_result.audio_files.slice(0, max_links)) {
-                        completion_message += `• [${file.name}](${file.url})\n`
-                    }
-                    if (upload_result.audio_files.length > max_links) {
-                        completion_message += `...他 ${upload_result.audio_files.length - max_links} ファイル\n`
-                    }
+                // transcript.txtのURLのみを表示
+                if (upload_result.transcript_file) {
+                    completion_message += `📝 **文字起こしファイル**\n`
+                    completion_message += `[transcript.txt](${upload_result.transcript_file.url})\n\n`
+                    completion_message += `${messages.upload.linksExpire(7)}\n`
+                } else {
+                    completion_message += `${messages.upload.linksExpire(7)}\n`
                 }
-
-                // メタデータのリンク（簡潔に）
-                if (upload_result.metadata_files.length > 0) {
-                    completion_message += `\n**${messages.upload.metadata}**\n`
-                    for (const file of upload_result.metadata_files) {
-                        completion_message += `• [${file.name}](${file.url})\n`
-                    }
-                }
-
-                completion_message += `\n${messages.upload.linksExpire(7)}`
 
                 // 文字起こしプレビューを追加（メッセージ長を考慮）
                 if (transcription_result && transcription_result.transcript) {
@@ -354,7 +339,7 @@ export class Bot {
                                   ) + "..."
                                 : transcription_result.transcript
 
-                        completion_message += `\n\n${messages.transcription.preview}\n\`\`\`\n${preview}\n\`\`\``
+                        completion_message += `\n${messages.transcription.preview}\n\`\`\`\n${preview}\n\`\`\``
                     }
                 }
 
@@ -366,38 +351,6 @@ export class Bot {
                 await upload_message.edit({
                     content: completion_message
                 })
-
-                // 文字起こしが長い場合は、別メッセージで送信
-                if (
-                    transcription_result &&
-                    transcription_result.transcript &&
-                    transcription_result.transcript.length > preview_length
-                ) {
-                    const transcript_file_path = path.join(
-                        summary.directory,
-                        "transcript.txt"
-                    )
-
-                    if (fs.existsSync(transcript_file_path)) {
-                        try {
-                            await interaction.followUp({
-                                content:
-                                    `📝 **文字起こし全文**\n` +
-                                    `文字数: ${transcription_result.character_count.toLocaleString()}\n` +
-                                    `Firebase Storageからもダウンロード可能です。`,
-                                files: [
-                                    {
-                                        attachment: transcript_file_path,
-                                        name: "transcript.txt"
-                                    }
-                                ]
-                            })
-                        } catch (file_error) {
-                            console.error("文字起こしファイル送信エラー:", file_error)
-                            // エラーがあっても続行
-                        }
-                    }
-                }
 
                 console.log(`✅ アップロード完了: ${file_count} ファイル (${total_size})`)
             } catch (upload_error) {

@@ -8,6 +8,7 @@ import { messages } from "../messages"
 interface UploadResult {
     audio_files: FileInfo[]
     metadata_files: FileInfo[]
+    transcript_file?: FileInfo
     total_size: number
     duration_ms: number
 }
@@ -221,13 +222,16 @@ export class StorageService {
         const json_files = all_files.filter(
             (file) => file.endsWith(".json") || file.endsWith(".jsonl")
         )
+        const transcript_file = all_files.find((file) => file === "transcript.txt")
 
-        const total_files = mp3_files.length + json_files.length
+        const total_files =
+            mp3_files.length + json_files.length + (transcript_file ? 1 : 0)
         let uploaded_count = 0
         let total_size = 0
 
         const audio_files: FileInfo[] = []
         const metadata_files: FileInfo[] = []
+        let transcript_file_info: FileInfo | undefined = undefined
 
         // MP3ファイルをアップロード
         for (const mp3_file of mp3_files) {
@@ -261,11 +265,28 @@ export class StorageService {
             }
         }
 
+        // transcript.txtをアップロード
+        if (transcript_file) {
+            const local_path = path.join(session_dir, transcript_file)
+            const remote_path = `${remote_base}/${transcript_file}`
+
+            const { url, size } = await this.uploadFile(local_path, remote_path)
+            transcript_file_info = { name: transcript_file, url, size }
+            total_size += size
+
+            uploaded_count++
+            const percent = Math.round((uploaded_count / total_files) * 100)
+            if (progress_callback) {
+                progress_callback(uploaded_count, total_files, percent)
+            }
+        }
+
         const duration_ms = Date.now() - start_time
 
         return {
             audio_files,
             metadata_files,
+            transcript_file: transcript_file_info,
             total_size,
             duration_ms
         }
