@@ -8,7 +8,7 @@
     "dev": "tsx app/index.ts",
     "build": "tsc -p .",
     "start": "node dist/index.js",
-    "deploy": "tsx -e \"import('./app/bot.js').then(m => new m.Bot().deployCommands())\"",
+    "deploy": "tsx app/deploy.ts",
     "lint": "eslint app/**/*.ts",
     "lint:fix": "eslint app/**/*.ts --fix",
     "format": "prettier --write \"app/**/*.ts\"",
