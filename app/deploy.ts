@@ -1,18 +1,20 @@
 import { Bot } from "./bot"
+import { messages } from "./messages"
 
 /**
  * コマンドデプロイ専用スクリプト
  */
 async function deploy() {
-    console.log("🚀 スラッシュコマンドをデプロイしています...")
+    console.log(messages.deploy.starting)
 
     try {
         const bot = new Bot()
         await bot.deployCommands()
-        console.log("✅ デプロイが完了しました")
+        console.log(messages.deploy.completed)
         process.exit(0)
     } catch (error) {
-        console.error("❌ デプロイに失敗しました:", error)
+        const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+        console.error(messages.deploy.failed(error_message))
         process.exit(1)
     }
 }

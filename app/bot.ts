@@ -80,8 +80,8 @@ export class Bot {
                     })
             }
         } catch (error) {
-            console.error("コマンド実行エラー:", error)
-            const error_message = error instanceof Error ? error.message : "不明なエラー"
+            const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+            console.error(messages.logs.commandError(error_message))
 
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp({
@@ -147,10 +147,10 @@ export class Bot {
                 content: messages.recording.started(voice_channel.name)
             })
 
-            console.log(`🎙️ 録音開始: Guild ${interaction.guildId}, Channel ${voice_channel.name}`)
+            console.log(messages.logs.recordingStarted(interaction.guildId, voice_channel.name))
         } catch (error) {
-            console.error("録音開始エラー:", error)
-            const error_message = error instanceof Error ? error.message : "不明なエラー"
+            const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+            console.error(messages.logs.recordingStartError(error_message))
 
             await interaction.editReply({
                 content: messages.recording.recordingFailed(error_message)
@@ -196,7 +196,7 @@ export class Bot {
                     messages.recording.filesSaved(summary.directory)
             })
 
-            console.log(`⏹️ 録音停止: Guild ${interaction.guildId}`)
+            console.log(messages.logs.recordingStopped(interaction.guildId))
 
             // Firebase Storage が設定されていない場合は終了
             if (!this.storage_service.isConfigured()) {
@@ -231,7 +231,7 @@ export class Bot {
                     }
                 )
 
-                console.log(`✅ ${mp3_paths.length} ファイルをMP3に変換しました`)
+                console.log(messages.logs.mp3Converted(mp3_paths.length))
 
                 // 文字起こし
                 let transcription_result = null
@@ -316,7 +316,7 @@ export class Bot {
 
                 // transcript.txtのURLのみを表示
                 if (upload_result.transcript_file) {
-                    completion_message += `📝 **文字起こしファイル**\n`
+                    completion_message += `${messages.upload.transcriptFile}\n`
                     completion_message += `[transcript.txt](${upload_result.transcript_file.url})\n\n`
                     completion_message += `${messages.upload.linksExpire(7)}\n`
                 } else {
@@ -352,19 +352,19 @@ export class Bot {
                     content: completion_message
                 })
 
-                console.log(`✅ アップロード完了: ${file_count} ファイル (${total_size})`)
+                console.log(messages.logs.uploadCompleted(file_count, total_size))
             } catch (upload_error) {
-                console.error("アップロードエラー:", upload_error)
                 const error_msg =
-                    upload_error instanceof Error ? upload_error.message : "不明なエラー"
+                    upload_error instanceof Error ? upload_error.message : messages.errors.unknownError
+                console.error(messages.logs.uploadError(error_msg))
 
                 await upload_message.edit({
                     content: messages.upload.failed(error_msg)
                 })
             }
         } catch (error) {
-            console.error("録音停止エラー:", error)
-            const error_message = error instanceof Error ? error.message : "不明なエラー"
+            const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+            console.error(messages.logs.recordingStopError(error_message))
 
             await interaction.editReply({
                 content: messages.recording.stopFailed(error_message)
@@ -410,7 +410,7 @@ export class Bot {
         const rest = new REST({ version: "10" }).setToken(appConfig.discord.token)
 
         try {
-            console.log("📝 スラッシュコマンドを登録しています...")
+            console.log(messages.logs.deployStarting)
 
             if (appConfig.discord.guildId) {
                 // ギルド固有のコマンドとして登録（即座に反映）
@@ -421,16 +421,17 @@ export class Bot {
                     ),
                     { body: commands }
                 )
-                console.log(`✅ ギルド ${appConfig.discord.guildId} にコマンドを登録しました`)
+                console.log(messages.logs.deploySuccessGuild(appConfig.discord.guildId))
             } else {
                 // グローバルコマンドとして登録（反映まで最大1時間）
                 await rest.put(Routes.applicationCommands(appConfig.discord.clientId), {
                     body: commands
                 })
-                console.log("✅ グローバルコマンドを登録しました")
+                console.log(messages.logs.deploySuccessGlobal)
             }
         } catch (error) {
-            console.error("コマンド登録エラー:", error)
+            const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+            console.error(messages.logs.deployError(error_message))
             throw error
         }
     }
@@ -442,7 +443,8 @@ export class Bot {
         try {
             await this.client.login(appConfig.discord.token)
         } catch (error) {
-            console.error("ログインエラー:", error)
+            const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+            console.error(messages.logs.loginError(error_message))
             throw error
         }
     }
@@ -458,10 +460,11 @@ export class Bot {
             try {
                 if (manager.isActive()) {
                     await manager.stop()
-                    console.log(`⏹️ Guild ${guild_id} の録音を停止しました`)
+                    console.log(messages.logs.stopGuildRecording(guild_id))
                 }
             } catch (error) {
-                console.error(`録音停止エラー (Guild ${guild_id}):`, error)
+                const error_message = error instanceof Error ? error.message : messages.errors.unknownError
+                console.error(messages.logs.stopGuildRecordingError(guild_id, error_message))
             }
         }
         this.recording_managers.clear()

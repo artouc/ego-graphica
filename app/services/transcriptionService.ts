@@ -49,12 +49,12 @@ export class TranscriptionService {
         const { apiKey: api_key, transcriptionEnabled: transcription_enabled } = appConfig.openai
 
         if (!transcription_enabled) {
-            console.log("ℹ️ 文字起こし機能は無効化されています")
+            console.log(messages.env.transcriptionDisabled)
             return
         }
 
         if (!api_key) {
-            console.warn("⚠️ OpenAI API Key が設定されていません。文字起こし機能は無効化されます。")
+            console.warn(messages.env.openaiKeyMissing)
             return
         }
 
@@ -63,9 +63,10 @@ export class TranscriptionService {
                 apiKey: api_key
             })
             this.is_initialized = true
-            console.log("✅ OpenAI クライアントを初期化しました")
+            console.log(messages.env.openaiInitialized)
         } catch (error) {
-            console.error("❌ OpenAI クライアントの初期化に失敗:", error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.env.openaiInitFailed(error_message))
         }
     }
 
@@ -141,7 +142,7 @@ export class TranscriptionService {
      */
     private async transcribeAudio(audio_path: string): Promise<string> {
         if (!this.openai) {
-            throw new Error("OpenAI クライアントが初期化されていません")
+            throw new Error(messages.errors.openaiNotInitialized)
         }
 
         const file_stream = fs.createReadStream(audio_path)
@@ -183,7 +184,7 @@ export class TranscriptionService {
         // segments.jsonl を読み込み
         const segments_path = path.join(session_dir, "segments.jsonl")
         if (!fs.existsSync(segments_path)) {
-            throw new Error("segments.jsonl が見つかりません")
+            throw new Error(messages.errors.segmentsNotFound)
         }
 
         const segments_content = fs.readFileSync(segments_path, "utf-8")
@@ -195,7 +196,7 @@ export class TranscriptionService {
         // participants.json を読み込み
         const participants_path = path.join(session_dir, "participants.json")
         if (!fs.existsSync(participants_path)) {
-            throw new Error("participants.json が見つかりません")
+            throw new Error(messages.errors.participantsNotFound)
         }
 
         const participants_data = JSON.parse(fs.readFileSync(participants_path, "utf-8"))
@@ -213,7 +214,7 @@ export class TranscriptionService {
             const file_to_transcribe = fs.existsSync(mp3_path) ? mp3_path : audio_path
 
             if (!fs.existsSync(file_to_transcribe)) {
-                console.warn(`⚠️ ファイルが見つかりません: ${file_to_transcribe}`)
+                console.warn(messages.logs.fileNotFound(file_to_transcribe))
                 continue
             }
 
@@ -237,7 +238,8 @@ export class TranscriptionService {
                     progress_callback(processed, segments.length)
                 }
             } catch (error) {
-                console.error(`❌ 文字起こしエラー (${segment.file}):`, error)
+                const error_message = error instanceof Error ? error.message : String(error)
+                console.error(messages.logs.transcriptionFileError(segment.file, error_message))
                 // エラーがあっても続行
             }
         }

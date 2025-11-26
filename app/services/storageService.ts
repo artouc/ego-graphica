@@ -45,9 +45,7 @@ export class StorageService {
 
         // Firebase設定が不完全な場合は初期化をスキップ
         if (!project_id || !private_key || !client_email || !storage_bucket) {
-            console.warn(
-                "⚠️ Firebase Storage の設定が不完全です。アップロード機能は無効化されます。"
-            )
+            console.warn(messages.env.firebaseIncomplete)
             return
         }
 
@@ -68,9 +66,10 @@ export class StorageService {
             this.bucket = this.storage.bucket()
             this.is_initialized = true
 
-            console.log("✅ Firebase Storage を初期化しました")
+            console.log(messages.env.firebaseInitialized)
         } catch (error) {
-            console.error("❌ Firebase Storage の初期化に失敗:", error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.env.firebaseInitFailed(error_message))
         }
     }
 
@@ -114,7 +113,7 @@ export class StorageService {
             const mp3_file = wav_file.replace(".wav", ".mp3")
             const mp3_path = path.join(session_dir, mp3_file)
 
-            console.log(`🔄 MP3変換中: ${wav_file} -> ${mp3_file}`)
+            console.log(messages.logs.mp3Converting(wav_file, mp3_file))
 
             try {
                 await this.convertToMp3(wav_path, mp3_path)
@@ -127,12 +126,13 @@ export class StorageService {
                     progress_callback(i + 1, wav_files.length)
                 }
             } catch (error: unknown) {
-                console.error(`❌ MP3変換エラー (${wav_file}):`, error)
-                throw new Error(`MP3変換に失敗: ${wav_file}`)
+                const error_message = error instanceof Error ? error.message : String(error)
+                console.error(messages.logs.mp3ConvertError(wav_file, error_message))
+                throw new Error(messages.errors.mp3ConvertFailed(wav_file))
             }
         }
 
-        console.log(`✅ ${mp3_paths.length} ファイルをMP3に変換しました`)
+        console.log(messages.logs.mp3Converted(mp3_paths.length))
         return mp3_paths
     }
 
@@ -202,7 +202,7 @@ export class StorageService {
         progress_callback?: (current: number, total: number, percent: number) => void
     ): Promise<UploadResult> {
         if (!this.is_initialized || !this.bucket) {
-            throw new Error(messages.upload.firebaseNotConfigured)
+            throw new Error(messages.errors.firebaseNotInitialized)
         }
 
         const start_time = Date.now()

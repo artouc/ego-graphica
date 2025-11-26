@@ -49,7 +49,22 @@ export const messages = {
         connecting: "🔌 ボイスチャンネルに接続中...",
         connected: "✅ ボイスチャンネルに接続しました",
         disconnecting: "🔌 ボイスチャンネルから切断中...",
-        disconnected: "✅ ボイスチャンネルから切断しました"
+        disconnected: "✅ ボイスチャンネルから切断しました",
+        connectingTo: (channelId: string, guildId: string) =>
+            `🔌 ボイスチャンネルに接続中... (Channel: ${channelId}, Guild: ${guildId})`,
+        stateChanged: (oldState: string, newState: string) =>
+            `🔌 接続状態変更: ${oldState} → ${newState} (${newState})`,
+        waitingReady: "⏳ Ready状態を待機中...",
+        connectionError: (error: string) => `❌ ボイス接続エラー: ${error}`,
+        connectionTimeout: (error: string, status: string) =>
+            `ボイスチャンネルへの接続がタイムアウトしました。\n` +
+            `エラー: ${error}\n` +
+            `状態: ${status}\n\n` +
+            `確認事項:\n` +
+            `1. Botに「接続」「発言」「音声検出を使用」の権限があるか\n` +
+            `2. Botがサーバーに正しく招待されているか\n` +
+            `3. ボイスチャンネルが利用可能か\n` +
+            `4. Botが他のボイスチャンネルに接続していないか`
     },
 
     upload: {
@@ -76,7 +91,8 @@ export const messages = {
 
         // ファイル情報
         audioFiles: "🎵 音声ファイル",
-        metadata: "📋 メタデータ"
+        metadata: "📋 メタデータ",
+        transcriptFile: "📝 **文字起こしファイル**"
     },
 
     transcription: {
@@ -94,5 +110,123 @@ export const messages = {
         failed: (error: string) => `❌ 文字起こしに失敗しました: ${error}`,
         notConfigured: "⚠️ OpenAI API が設定されていません。文字起こしはスキップされます。",
         disabled: "ℹ️ 文字起こし機能は無効化されています。"
+    },
+
+    logs: {
+        // Bot起動・停止
+        botStarting: "🚀 ego Graphica Bot を起動しています...",
+        signalReceived: (signal: string) => `\n⚠️  ${signal} を受信しました`,
+
+        // 録音関連
+        recordingStarted: (guildId: string, channelName: string) =>
+            `🎙️ 録音開始: Guild ${guildId}, Channel ${channelName}`,
+        recordingStopped: (guildId: string) => `⏹️ 録音停止: Guild ${guildId}`,
+        recordingStartedDir: (dir: string) => `🎙️ 録音開始: ${dir}`,
+        recordingStoppedDir: (dir: string, duration: number) =>
+            `⏹️ 録音停止: ${dir} (${duration}ms)`,
+
+        // 参加者
+        participantAdded: (displayName: string, username: string) =>
+            `👤 参加者追加: ${displayName} (${username})`,
+        segmentEnded: (file: string, duration: number) =>
+            `✅ セグメント終了: ${file} (${duration}ms)`,
+
+        // ファイル処理
+        mp3Converted: (count: number) => `✅ ${count} ファイルをMP3に変換しました`,
+        metadataSaved: "💾 メタデータを保存しました",
+        mp3Converting: (wavFile: string, mp3File: string) =>
+            `🔄 MP3変換中: ${wavFile} -> ${mp3File}`,
+
+        // アップロード
+        uploadCompleted: (fileCount: number, totalSize: string) =>
+            `✅ アップロード完了: ${fileCount} ファイル (${totalSize})`,
+
+        // 文字起こし
+        transcriptionCompleted: (charCount: number, duration: string) =>
+            `✅ 文字起こし完了: ${charCount} 文字 (${duration})`,
+
+        // コマンド
+        commandError: (error: string) => `コマンド実行エラー: ${error}`,
+        recordingStartError: (error: string) => `録音開始エラー: ${error}`,
+        recordingStopError: (error: string) => `録音停止エラー: ${error}`,
+        transcriptionError: (error: string) => `文字起こしエラー: ${error}`,
+        uploadError: (error: string) => `アップロードエラー: ${error}`,
+        deployStarting: "📝 スラッシュコマンドを登録しています...",
+        deploySuccessGuild: (guildId: string) =>
+            `✅ ギルド ${guildId} にコマンドを登録しました`,
+        deploySuccessGlobal: "✅ グローバルコマンドを登録しました",
+        deployError: (error: string) => `コマンド登録エラー: ${error}`,
+        loginError: (error: string) => `ログインエラー: ${error}`,
+        stopGuildRecording: (guildId: string) => `⏹️ Guild ${guildId} の録音を停止しました`,
+        stopGuildRecordingError: (guildId: string, error: string) =>
+            `録音停止エラー (Guild ${guildId}): ${error}`,
+
+        // エラー
+        audioStreamError: (userId: string, error: string) =>
+            `音声ストリームエラー (${userId}): ${error}`,
+        segmentEndError: (userId: string, error: string) =>
+            `セグメント終了エラー (${userId}): ${error}`,
+        recordingEndError: (userId: string, error: string) =>
+            `録音終了エラー (${userId}): ${error}`,
+        transcriptionFileError: (file: string, error: string) =>
+            `❌ 文字起こしエラー (${file}): ${error}`,
+        mp3ConvertError: (wavFile: string, error: string) =>
+            `❌ MP3変換エラー (${wavFile}): ${error}`,
+        fileNotFound: (file: string) => `⚠️ ファイルが見つかりません: ${file}`,
+        transcriptFileSendError: (error: string) => `文字起こしファイル送信エラー: ${error}`
+    },
+
+    errors: {
+        // 録音関連
+        alreadyRecording: "すでに録音が開始されています",
+        notRecording: "録音が開始されていません",
+        connectionTimeout: (error: string, status: string) =>
+            `ボイスチャンネルへの接続がタイムアウトしました。\n` +
+            `エラー: ${error}\n` +
+            `状態: ${status}\n\n` +
+            `確認事項:\n` +
+            `1. Botに「接続」「発言」「音声検出を使用」の権限があるか\n` +
+            `2. Botがサーバーに正しく招待されているか\n` +
+            `3. ボイスチャンネルが利用可能か\n` +
+            `4. Botが他のボイスチャンネルに接続していないか`,
+
+        // ストレージ関連
+        sessionDirCreationFailed: (error: string) => `セッションディレクトリの作成に失敗: ${error}`,
+        metadataSaveFailed: (error: string) => `メタデータの保存に失敗: ${error}`,
+        mp3ConvertFailed: (wavFile: string) => `MP3変換に失敗: ${wavFile}`,
+        firebaseNotInitialized: "Firebase Storage が初期化されていません",
+
+        // 文字起こし関連
+        openaiNotInitialized: "OpenAI クライアントが初期化されていません",
+        segmentsNotFound: "segments.jsonl が見つかりません",
+        participantsNotFound: "participants.json が見つかりません",
+
+        // その他
+        unknownError: "不明なエラー",
+        botStartFailed: (error: string) => `Bot の起動に失敗しました: ${error}`,
+        unhandledRejection: (error: string) => `未処理の Promise エラー: ${error}`,
+        uncaughtException: (error: string) => `未処理の例外: ${error}`
+    },
+
+    deploy: {
+        starting: "🚀 スラッシュコマンドをデプロイしています...",
+        completed: "✅ デプロイが完了しました",
+        failed: (error: string) => `❌ デプロイに失敗しました: ${error}`
+    },
+
+    env: {
+        validationFailed: "⚠️  環境変数の検証に失敗しました:",
+        validationIssue: (path: string, message: string) => `  - ${path}: ${message}`,
+        directoryCreated: (dir: string) => `📁 ディレクトリを作成しました: ${dir}`,
+        directoryCreationFailed: (dir: string, error: string) =>
+            `❌ ディレクトリの作成に失敗しました: ${dir} ${error}`,
+        firebaseIncomplete: "⚠️ Firebase Storage の設定が不完全です。アップロード機能は無効化されます。",
+        firebaseInitialized: "✅ Firebase Storage を初期化しました",
+        firebaseInitFailed: (error: string) => `❌ Firebase Storage の初期化に失敗: ${error}`,
+        transcriptionDisabled: "ℹ️ 文字起こし機能は無効化されています",
+        openaiKeyMissing:
+            "⚠️ OpenAI API Key が設定されていません。文字起こし機能は無効化されます。",
+        openaiInitialized: "✅ OpenAI クライアントを初期化しました",
+        openaiInitFailed: (error: string) => `❌ OpenAI クライアントの初期化に失敗: ${error}`
     }
 }

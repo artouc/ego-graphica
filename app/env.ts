@@ -2,6 +2,7 @@ import { z } from "zod"
 import { config } from "dotenv"
 import path from "path"
 import fs from "fs"
+import { messages } from "./messages"
 
 // Load .env file
 config()
@@ -39,9 +40,9 @@ function loadEnv() {
     const result = envSchema.safeParse(process.env)
 
     if (!result.success) {
-        console.warn("⚠️  環境変数の検証に失敗しました:")
+        console.warn(messages.env.validationFailed)
         result.error.issues.forEach((issue) => {
-            console.warn(`  - ${issue.path.join(".")}: ${issue.message}`)
+            console.warn(messages.env.validationIssue(issue.path.join("."), issue.message))
         })
     }
 
@@ -62,10 +63,11 @@ function ensureDirectories() {
         try {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true })
-                console.log(`📁 ディレクトリを作成しました: ${dir}`)
+                console.log(messages.env.directoryCreated(dir))
             }
         } catch (error) {
-            console.error(`❌ ディレクトリの作成に失敗しました: ${dir}`, error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.env.directoryCreationFailed(dir, error_message))
         }
     }
 }

@@ -11,6 +11,7 @@ import * as prism from "prism-media"
 import fs from "fs"
 import path from "path"
 import { appConfig, RECORDINGS_DIR } from "../env"
+import { messages } from "../messages"
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const wav_writer = require("wav").Writer
@@ -63,7 +64,7 @@ export class RecordingManager {
      */
     async start(): Promise<string> {
         if (this.is_recording) {
-            throw new Error("すでに録音が開始されています")
+            throw new Error(messages.errors.alreadyRecording)
         }
 
         // セッションディレクトリの作成
@@ -73,7 +74,8 @@ export class RecordingManager {
         try {
             fs.mkdirSync(this.session_dir, { recursive: true })
         } catch (error) {
-            console.error("セッションディレクトリの作成に失敗:", error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.errors.sessionDirCreationFailed(error_message))
             // フォールバック: /tmp に作成
             this.session_dir = path.join(
                 "/tmp",
@@ -86,9 +88,7 @@ export class RecordingManager {
         this.start_time = timestamp
         this.is_recording = true
 
-        console.log(
-            `🔌 ボイスチャンネルに接続中... (Channel: ${this.channel.id}, Guild: ${this.guild_id})`
-        )
+        console.log(messages.voice.connectingTo(this.channel.id, this.guild_id))
 
         // ボイスチャンネルに接続
         this.connection = joinVoiceChannel({
@@ -102,44 +102,35 @@ export class RecordingManager {
 
         // 接続状態の監視
         this.connection.on("stateChange", (old_state, new_state) => {
-            console.log(
-                `🔌 接続状態変更: ${old_state.status} → ${new_state.status} (${new_state.status})`
-            )
+            console.log(messages.voice.stateChanged(old_state.status, new_state.status))
         })
 
         this.connection.on("error", (error) => {
-            console.error("❌ ボイス接続エラー:", error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.voice.connectionError(error_message))
         })
 
         try {
-            console.log("⏳ Ready状態を待機中...")
+            console.log(messages.voice.waitingReady)
             await entersState(this.connection, VoiceConnectionStatus.Ready, 30_000)
-            console.log("✅ ボイスチャンネルに接続しました")
+            console.log(messages.voice.connected)
         } catch (error) {
             const error_message = error instanceof Error ? error.message : String(error)
-            console.error("❌ 接続タイムアウト:", error_message)
-            console.error("接続状態:", this.connection.state.status)
+            const status = this.connection?.state.status || "不明"
+            console.error(`接続タイムアウト: ${error_message}`)
+            console.error(`接続状態: ${status}`)
 
             if (this.connection) {
                 this.connection.destroy()
             }
 
-            throw new Error(
-                `ボイスチャンネルへの接続がタイムアウトしました。\n` +
-                    `エラー: ${error_message}\n` +
-                    `状態: ${this.connection?.state.status || "不明"}\n\n` +
-                    `確認事項:\n` +
-                    `1. Botに「接続」「発言」「音声検出を使用」の権限があるか\n` +
-                    `2. Botがサーバーに正しく招待されているか\n` +
-                    `3. ボイスチャンネルが利用可能か\n` +
-                    `4. Botが他のボイスチャンネルに接続していないか`
-            )
+            throw new Error(messages.errors.connectionTimeout(error_message, status))
         }
 
         // 音声受信の開始
         this.setupAudioReceiving()
 
-        console.log(`🎙️ 録音開始: ${this.session_dir}`)
+        console.log(messages.logs.recordingStartedDir(this.session_dir))
         return this.session_dir
     }
 
@@ -226,7 +217,8 @@ export class RecordingManager {
 
         // エラーハンドリング
         audio_stream.on("error", (error) => {
-            console.error(`音声ストリームエラー (${user_id}):`, error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.logs.audioStreamError(user_id, error_message))
             this.finalizeSegment(user_id, segment)
         })
     }
@@ -246,9 +238,10 @@ export class RecordingManager {
             segment.end_ms = end_time - this.start_time
             segment.duration = end_time - state.start_time
 
-            console.log(`✅ セグメント終了: ${segment.file} (${segment.duration}ms)`)
+            console.log(messages.logs.segmentEnded(segment.file, segment.duration))
         } catch (error) {
-            console.error(`セグメント終了エラー (${user_id}):`, error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.logs.segmentEndError(user_id, error_message))
         } finally {
             this.user_states.delete(user_id)
         }
@@ -271,7 +264,7 @@ export class RecordingManager {
         }
 
         this.participants.set(user_id, participant)
-        console.log(`👤 参加者追加: ${participant.display_name} (${participant.username})`)
+        console.log(messages.logs.participantAdded(participant.display_name, participant.username))
     }
 
     /**
@@ -279,7 +272,7 @@ export class RecordingManager {
      */
     async stop(): Promise<RecordingSummary> {
         if (!this.is_recording) {
-            throw new Error("録音が開始されていません")
+            throw new Error(messages.errors.notRecording)
         }
 
         this.is_recording = false
@@ -290,7 +283,8 @@ export class RecordingManager {
                 state.writer.end()
                 state.file_stream.end()
             } catch (error) {
-                console.error(`録音終了エラー (${user_id}):`, error)
+                const error_message = error instanceof Error ? error.message : String(error)
+                console.error(messages.logs.recordingEndError(user_id, error_message))
             }
         }
         this.user_states.clear()
@@ -307,7 +301,7 @@ export class RecordingManager {
         const end_time = Date.now()
         const duration = end_time - this.start_time
 
-        console.log(`⏹️ 録音停止: ${this.session_dir} (${duration}ms)`)
+        console.log(messages.logs.recordingStoppedDir(this.session_dir, duration))
 
         return {
             directory: this.session_dir,
@@ -342,9 +336,10 @@ export class RecordingManager {
             const segments_content = this.segments.map((seg) => JSON.stringify(seg)).join("\n")
             fs.writeFileSync(segments_path, segments_content)
 
-            console.log("💾 メタデータを保存しました")
+            console.log(messages.logs.metadataSaved)
         } catch (error) {
-            console.error("メタデータの保存に失敗:", error)
+            const error_message = error instanceof Error ? error.message : String(error)
+            console.error(messages.errors.metadataSaveFailed(error_message))
         }
     }
 
