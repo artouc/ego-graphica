@@ -8,6 +8,8 @@ import {
     GuildMember,
     VoiceBasedChannel
 } from "discord.js"
+import fs from "fs"
+import path from "path"
 import { appConfig } from "./env"
 import { messages } from "./messages"
 import { RecordingManager } from "./voice/RecordingManager"
@@ -331,19 +333,70 @@ export class Bot {
 
                 completion_message += `\n${messages.upload.linksExpire(7)}`
 
-                // 文字起こしプレビューを追加
-                if (transcription_result && transcription_result.transcript) {
-                    const preview =
-                        transcription_result.transcript.length > 500
-                            ? transcription_result.transcript.substring(0, 500) + "..."
-                            : transcription_result.transcript
+                // メッセージ長をチェック（Discordの4000文字制限）
+                const max_length = 4000
+                const preview_length = 300 // プレビューは300文字に制限
 
-                    completion_message += `\n\n${messages.transcription.preview}\n\`\`\`\n${preview}\n\`\`\``
+                // 文字起こしプレビューを追加（メッセージ長を考慮）
+                if (transcription_result && transcription_result.transcript) {
+                    const remaining_length =
+                        max_length - completion_message.length - 100 // 余裕を持たせる
+                    const available_preview_length = Math.min(preview_length, remaining_length)
+
+                    if (available_preview_length > 50) {
+                        // プレビューを追加できる場合
+                        const preview =
+                            transcription_result.transcript.length > available_preview_length
+                                ? transcription_result.transcript.substring(
+                                      0,
+                                      available_preview_length
+                                  ) + "..."
+                                : transcription_result.transcript
+
+                        completion_message += `\n\n${messages.transcription.preview}\n\`\`\`\n${preview}\n\`\`\``
+                    }
+                }
+
+                // メッセージが長すぎる場合は切り詰める
+                if (completion_message.length > max_length) {
+                    completion_message = completion_message.substring(0, max_length - 3) + "..."
                 }
 
                 await upload_message.edit({
                     content: completion_message
                 })
+
+                // 文字起こしが長い場合は、別メッセージで送信
+                if (
+                    transcription_result &&
+                    transcription_result.transcript &&
+                    transcription_result.transcript.length > preview_length
+                ) {
+                    const transcript_file_path = path.join(
+                        summary.directory,
+                        "transcript.txt"
+                    )
+
+                    if (fs.existsSync(transcript_file_path)) {
+                        try {
+                            await interaction.followUp({
+                                content:
+                                    `📝 **文字起こし全文**\n` +
+                                    `文字数: ${transcription_result.character_count.toLocaleString()}\n` +
+                                    `Firebase Storageからもダウンロード可能です。`,
+                                files: [
+                                    {
+                                        attachment: transcript_file_path,
+                                        name: "transcript.txt"
+                                    }
+                                ]
+                            })
+                        } catch (file_error) {
+                            console.error("文字起こしファイル送信エラー:", file_error)
+                            // エラーがあっても続行
+                        }
+                    }
+                }
 
                 console.log(`✅ アップロード完了: ${file_count} ファイル (${total_size})`)
             } catch (upload_error) {
