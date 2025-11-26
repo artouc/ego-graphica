@@ -305,25 +305,30 @@ export class Bot {
                 const total_size = this.storage_service.formatBytes(upload_result.total_size)
                 const file_count = upload_result.audio_files.length
 
+                // Discordのメッセージ制限は2000文字
+                const max_length = 2000
+                const preview_length = 200 // プレビューは200文字に制限
+
+                // 基本メッセージを構築
                 let completion_message =
                     messages.upload.completed(upload_duration, file_count, total_size) +
                     "\n\n" +
                     messages.upload.downloadLinks +
                     "\n"
 
-                // 音声ファイルのリンク
+                // 音声ファイルのリンクファイルのリンク（最大5個まで）
                 if (upload_result.audio_files.length > 0) {
                     completion_message += `\n**${messages.upload.audioFiles}**\n`
-                    for (const file of upload_result.audio_files.slice(0, 10)) {
-                        // 最大10個まで
+                    const max_links = 5
+                    for (const file of upload_result.audio_files.slice(0, max_links)) {
                         completion_message += `• [${file.name}](${file.url})\n`
                     }
-                    if (upload_result.audio_files.length > 10) {
-                        completion_message += `...他 ${upload_result.audio_files.length - 10} ファイル\n`
+                    if (upload_result.audio_files.length > max_links) {
+                        completion_message += `...他 ${upload_result.audio_files.length - max_links} ファイル\n`
                     }
                 }
 
-                // メタデータのリンク
+                // メタデータのリンク（簡潔に）
                 if (upload_result.metadata_files.length > 0) {
                     completion_message += `\n**${messages.upload.metadata}**\n`
                     for (const file of upload_result.metadata_files) {
@@ -333,14 +338,10 @@ export class Bot {
 
                 completion_message += `\n${messages.upload.linksExpire(7)}`
 
-                // メッセージ長をチェック（Discordの4000文字制限）
-                const max_length = 4000
-                const preview_length = 300 // プレビューは300文字に制限
-
                 // 文字起こしプレビューを追加（メッセージ長を考慮）
                 if (transcription_result && transcription_result.transcript) {
                     const remaining_length =
-                        max_length - completion_message.length - 100 // 余裕を持たせる
+                        max_length - completion_message.length - 150 // 余裕を持たせる
                     const available_preview_length = Math.min(preview_length, remaining_length)
 
                     if (available_preview_length > 50) {
