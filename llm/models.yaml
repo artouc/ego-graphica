@@ -1,0 +1,530 @@
+# egoGraphica Data Models
+# This file documents all data models used in the application
+# Updated: 2026-01-06
+
+models:
+    # ============================================
+    # Artist Models
+    # ============================================
+    Artist:
+        description: "Main artist entity containing profile, persona, and settings"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            id: "string - Unique identifier"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+            profile: "ArtistProfile - Artist's profile information"
+            persona: "ArtistPersona - AI persona configuration"
+            settings: "AgentSettings - Agent behavior settings"
+            storageSettings: "StorageSettings - Storage configuration"
+
+    StorageSettings:
+        description: "Storage configuration for artist's data"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            pineconeNamespace: "string - Pinecone vector namespace"
+            storageFolderName: "string - Firebase storage folder name"
+
+    ArtistProfile:
+        description: "Artist's public profile information"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            name: "string - Display name"
+            nameKana: "string? - Name in kana (optional)"
+            email: "string - Email address"
+            bio: "string - Biography"
+            website: "string? - Website URL (optional)"
+            socialLinks:
+                twitter: "string? - Twitter handle (optional)"
+                instagram: "string? - Instagram handle (optional)"
+                behance: "string? - Behance URL (optional)"
+            profileImageUrl: "string? - Profile image URL (optional)"
+            coverImageUrl: "string? - Cover image URL (optional)"
+            activeYears: "number - Years active as artist"
+            specialties: "string[] - List of specialties"
+            styles: "string[] - List of artistic styles"
+
+    ArtistPersona:
+        description: "AI persona configuration for the artist's agent"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            characterName: "string? - Optional character name"
+            motif: "string - Main artistic motif"
+            tone: "PersonaTone - Communication tone"
+            personality: "string[] - Personality traits"
+            artisticPhilosophy: "string - Artistic philosophy statement"
+            influences: "string[] - Artistic influences"
+            keywords: "string[] - Keywords for persona"
+            greetingStyle: "string - How to greet customers"
+            sampleResponses: "SampleResponse[] - Example responses"
+            avoidTopics: "string[] - Topics to avoid"
+            backstory: "string - Character backstory"
+
+    PersonaTone:
+        description: "Available tone options for persona"
+        location: "packages/shared/src/types/artist.ts"
+        type: "union"
+        values:
+            - "formal"
+            - "friendly"
+            - "artistic"
+            - "professional"
+            - "playful"
+
+    SampleResponse:
+        description: "Example response for persona training"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            situation: "string - Situation description"
+            customerMessage: "string - Customer's message"
+            idealResponse: "string - Ideal response from agent"
+
+    AgentSettings:
+        description: "Agent behavior and business settings"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            isActive: "boolean - Whether agent is active"
+            autoReply: "boolean - Enable auto-reply"
+            replyDelay: "number? - Delay before reply (optional)"
+            priceTable: "PriceTable - Pricing information"
+            currency: "JPY | USD - Currency for pricing"
+            availableDays: "number[] - Days available (0-6)"
+            busyPeriods: "BusyPeriod[] - Busy periods"
+            leadTime: "number - Lead time in days"
+            notifyOnNewConversation: "boolean - Notify on new conversation"
+            notifyOnQuoteRequest: "boolean - Notify on quote request"
+            notificationEmail: "string? - Email for notifications (optional)"
+
+    PriceTable:
+        description: "Pricing structure for different work types"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            illustration:
+                small: "number - Small illustration price"
+                medium: "number - Medium illustration price"
+                large: "number - Large illustration price"
+            mural:
+                perSquareMeter: "number - Price per square meter"
+                minimumCharge: "number - Minimum charge"
+            collaboration:
+                hourlyRate: "number - Hourly rate"
+                minimumHours: "number - Minimum hours"
+            custom: "Record<string, number> - Custom pricing"
+
+    BusyPeriod:
+        description: "Period when artist is unavailable"
+        location: "packages/shared/src/types/artist.ts"
+        fields:
+            startDate: "Date - Start of busy period"
+            endDate: "Date - End of busy period"
+            reason: "string? - Reason (optional)"
+
+    # ============================================
+    # Work Models
+    # ============================================
+    Work:
+        description: "Artwork entry with metadata and analysis"
+        location: "packages/shared/src/types/work.ts"
+        fields:
+            id: "string - Unique identifier"
+            artistId: "string - Artist's ID"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+            title: "string - Work title"
+            titleEn: "string? - English title (optional)"
+            description: "string - Work description"
+            descriptionEn: "string? - English description (optional)"
+            category: "WorkCategory - Work category"
+            tags: "string[] - Tags"
+            styles: "string[] - Style tags"
+            images: "WorkImage[] - Work images"
+            videoUrl: "string? - Video URL (optional)"
+            year: "number - Year created"
+            medium: "string - Medium used"
+            dimensions:
+                width: "number - Width"
+                height: "number - Height"
+                unit: "cm | inch | px - Unit of measurement"
+            isForSale: "boolean - Available for sale"
+            price: "number? - Price (optional)"
+            isCommissionable: "boolean - Available for commission"
+            isPublic: "boolean - Publicly visible"
+            isFeatured: "boolean - Featured work"
+            imageAnalysis: "ImageAnalysis? - AI analysis (optional)"
+            searchableText: "string - Searchable text for RAG"
+
+    WorkCategory:
+        description: "Available work categories"
+        location: "packages/shared/src/types/work.ts"
+        type: "union"
+        values:
+            - "illustration"
+            - "painting"
+            - "mural"
+            - "graphic_design"
+            - "character_design"
+            - "concept_art"
+            - "photography"
+            - "other"
+
+    WorkImage:
+        description: "Image associated with a work"
+        location: "packages/shared/src/types/work.ts"
+        fields:
+            url: "string - Full image URL"
+            thumbnailUrl: "string - Thumbnail URL"
+            alt: "string - Alt text"
+            isPrimary: "boolean - Is primary image"
+            order: "number - Display order"
+
+    ImageAnalysis:
+        description: "AI-generated analysis of artwork image"
+        location: "packages/shared/src/types/work.ts"
+        fields:
+            visual:
+                dominantColors: "string[] - Dominant colors"
+                colorMood: "string - Color mood"
+                composition: "string - Composition description"
+                style: "string - Art style"
+                technique: "string - Technique used"
+            content:
+                subject: "string - Subject matter"
+                elements: "string[] - Visual elements"
+                mood: "string - Overall mood"
+                narrative: "string - Narrative description"
+            meta:
+                suggestedTags: "string[] - AI suggested tags"
+                similarStyles: "string[] - Similar styles/artists"
+                targetAudience: "string - Target audience"
+                useCase: "string[] - Suggested use cases"
+            searchableDescription: "string - Searchable description"
+
+    # ============================================
+    # Chat Models
+    # ============================================
+    Conversation:
+        description: "Chat conversation with a customer"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            id: "string - Unique identifier"
+            artistId: "string - Artist's ID"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+            customer:
+                name: "string? - Customer name (optional)"
+                email: "string? - Customer email (optional)"
+                company: "string? - Company name (optional)"
+            status: "ConversationStatus - Conversation status"
+            summary: "string? - Conversation summary (optional)"
+            tags: "string[] - Tags"
+            messageCount: "number - Number of messages"
+            lastMessageAt: "Date - Last message timestamp"
+
+    ConversationStatus:
+        description: "Status of a conversation"
+        location: "packages/shared/src/types/chat.ts"
+        type: "union"
+        values:
+            - "active"
+            - "waiting_response"
+            - "quote_sent"
+            - "closed"
+            - "converted"
+
+    Message:
+        description: "Individual message in a conversation"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            id: "string - Unique identifier"
+            conversationId: "string - Conversation ID"
+            createdAt: "Date - Creation timestamp"
+            role: "user | assistant | system - Message role"
+            content: "string | MessageContent[] - Message content"
+            toolCalls: "ToolCallResult[]? - Tool call results (optional)"
+            tokensUsed: "number? - Tokens used (optional)"
+            modelUsed: "string? - Model used (optional)"
+
+    MessageContent:
+        description: "Structured message content"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            type: "text | image - Content type"
+            text: "string? - Text content (optional)"
+            source:
+                type: "url | base64 - Source type"
+                url: "string? - URL (optional)"
+                media_type: "string? - MIME type (optional)"
+                data: "string? - Base64 data (optional)"
+
+    ToolCallResult:
+        description: "Result of a tool call"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            toolName: "string - Tool name"
+            input: "Record<string, unknown> - Tool input"
+            output: "Record<string, unknown> - Tool output"
+            displayComponent: "string? - UI component (optional)"
+
+    Quote:
+        description: "Price quote for a customer"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            id: "string - Unique identifier"
+            artistId: "string - Artist's ID"
+            conversationId: "string - Related conversation ID"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+            customer:
+                name: "string - Customer name"
+                email: "string - Customer email"
+                company: "string? - Company name (optional)"
+            items: "QuoteItem[] - Line items"
+            subtotal: "number - Subtotal"
+            tax: "number - Tax amount"
+            total: "number - Total amount"
+            currency: "JPY | USD - Currency"
+            validUntil: "Date - Quote validity"
+            deliveryDate: "Date? - Delivery date (optional)"
+            notes: "string? - Notes (optional)"
+            status: "QuoteStatus - Quote status"
+            sentAt: "Date? - When sent (optional)"
+            respondedAt: "Date? - When responded (optional)"
+
+    QuoteItem:
+        description: "Line item in a quote"
+        location: "packages/shared/src/types/chat.ts"
+        fields:
+            description: "string - Item description"
+            category: "string - Category"
+            quantity: "number - Quantity"
+            unitPrice: "number - Unit price"
+            amount: "number - Total amount"
+
+    QuoteStatus:
+        description: "Status of a quote"
+        location: "packages/shared/src/types/chat.ts"
+        type: "union"
+        values:
+            - "draft"
+            - "sent"
+            - "accepted"
+            - "rejected"
+            - "expired"
+
+    # ============================================
+    # API Models
+    # ============================================
+    ChatRequest:
+        description: "Request body for chat endpoint"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            artistId: "string - Artist's ID"
+            messages: "ChatMessage[] - Message history"
+
+    ChatMessage:
+        description: "Message in chat request"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            role: "user | assistant | system - Message role"
+            content: "string | MessageContent[] - Message content"
+
+    ChatResponse:
+        description: "Response from chat endpoint"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            success: "boolean - Success status"
+            message: "string? - Response message (optional)"
+
+    WorkUploadRequest:
+        description: "Request body for work upload"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            title: "string - Work title"
+            titleEn: "string? - English title (optional)"
+            description: "string? - Description (optional)"
+            category: "string? - Category (optional)"
+            tags: "string[]? - Tags (optional)"
+            styles: "string[]? - Styles (optional)"
+            year: "number? - Year (optional)"
+            medium: "string? - Medium (optional)"
+            isPublic: "boolean? - Is public (optional)"
+            isFeatured: "boolean? - Is featured (optional)"
+
+    WorkUploadResponse:
+        description: "Response from work upload endpoint"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            success: "boolean - Success status"
+            workId: "string - Created work ID"
+            imageAnalysis: "ImageAnalysis? - AI analysis (optional)"
+            message: "string? - Response message (optional)"
+
+    ArtistResponse:
+        description: "Response from artist endpoint"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            success: "boolean - Success status"
+            artist:
+                id: "string - Artist ID"
+                name: "string - Artist name"
+                bio: "string - Biography"
+                profileImageUrl: "string? - Profile image (optional)"
+                specialties: "string[] - Specialties"
+                styles: "string[] - Styles"
+
+    HealthResponse:
+        description: "Response from health check endpoint"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            status: "healthy | degraded | unhealthy - Health status"
+            checks:
+                firebase: "boolean - Firebase status"
+                pinecone: "boolean - Pinecone status"
+                anthropic: "boolean - Anthropic API status"
+            timestamp: "string - Check timestamp"
+
+    ErrorResponse:
+        description: "Error response format"
+        location: "packages/shared/src/types/api.ts"
+        fields:
+            success: "false - Always false"
+            error: "string - Error message"
+            code: "string? - Error code (optional)"
+
+# ============================================
+# Database Collections (Firestore)
+# ============================================
+collections:
+    artists:
+        model: "Artist"
+        description: "Artist profiles and settings"
+
+    works:
+        model: "Work"
+        description: "Artwork entries"
+
+    conversations:
+        model: "Conversation"
+        description: "Chat conversations"
+
+    messages:
+        model: "Message"
+        description: "Chat messages"
+        parentCollection: "conversations"
+
+    quotes:
+        model: "Quote"
+        description: "Price quotes"
+
+    articles:
+        description: "Article content for RAG"
+        fields:
+            artistId: "string - Artist's ID"
+            title: "string - Article title"
+            content: "string - Article content"
+            excerpt: "string - Article excerpt"
+            tags: "string[] - Tags"
+            sourceUrl: "string? - Source URL (optional)"
+            searchableText: "string - Searchable text"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+
+    podcasts:
+        description: "Podcast content for RAG"
+        fields:
+            artistId: "string - Artist's ID"
+            title: "string - Podcast title"
+            description: "string - Description"
+            tags: "string[] - Tags"
+            audioUrl: "string - Audio file URL"
+            duration: "number - Duration in seconds"
+            transcript: "string - Transcribed text"
+            searchableText: "string - Searchable text"
+            status: "processing | transcribed | failed - Processing status"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+
+    documents:
+        description: "PDF documents for RAG (Claude Visual PDFs)"
+        fields:
+            artistId: "string - Artist's ID"
+            title: "string - Document title"
+            description: "string - Document description"
+            originalFilename: "string - Original filename"
+            fileUrl: "string - Firebase Storage URL"
+            storagePath: "string - Storage path"
+            analysis:
+                visual:
+                    dominantColors: "string[] - Dominant colors"
+                    colorMood: "string - Color mood"
+                    composition: "string - Composition/layout"
+                    style: "string - Document style"
+                    technique: "string - Design technique"
+                content:
+                    subject: "string - Main subject"
+                    elements: "string[] - Key elements"
+                    mood: "string - Overall mood"
+                    narrative: "string - Narrative description"
+                meta:
+                    suggestedTags: "string[] - AI suggested tags"
+                    suggestedTitle: "string - AI suggested title"
+                    suggestedCategory: "string - AI suggested category"
+                    similarStyles: "string[] - Similar styles"
+                    targetAudience: "string - Target audience"
+                    useCase: "string[] - Suggested use cases"
+                searchableDescription: "string - Searchable description"
+            tags: "string[] - Tags"
+            category: "string - Document category"
+            searchableText: "string - Searchable text for RAG"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+
+    urls:
+        description: "Scraped URL content for RAG"
+        fields:
+            artistId: "string - Artist's ID"
+            url: "string - Source URL"
+            title: "string - Page title"
+            mainContent: "string - Extracted main content"
+            summary: "string - AI-generated summary"
+            keyPoints: "string[] - Key points"
+            tags: "string[] - Tags"
+            category: "string - Content category"
+            language: "string - Language code (ja/en/etc)"
+            searchableText: "string - Searchable text for RAG"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+
+    "artists/{artistId}/from-url":
+        description: "URL content subcollection per artist (as per CLAUDE.md specification)"
+        fields:
+            artistId: "string - Artist's ID"
+            url: "string - Source URL"
+            title: "string - Page title"
+            mainContent: "string - Extracted main content"
+            summary: "string - AI-generated summary"
+            keyPoints: "string[] - Key points"
+            tags: "string[] - Tags"
+            category: "string - Content category"
+            language: "string - Language code"
+            searchableText: "string - Searchable text"
+            createdAt: "Date - Creation timestamp"
+            updatedAt: "Date - Last update timestamp"
+
+# ============================================
+# Vector Database (Pinecone)
+# ============================================
+vectors:
+    namespace: "Per-artist namespace (storageSettings.pineconeNamespace)"
+    metadata:
+        artistId: "string - Artist's ID"
+        type: "work | article | podcast - Content type"
+        sourceId: "string - Source document ID"
+        title: "string - Title"
+        category: "string? - Category (optional)"
+        tags: "string[] - Tags"
+        colors: "string[]? - Dominant colors (optional, works only)"
+        style: "string? - Art style (optional, works only)"
+        mood: "string? - Mood (optional, works only)"
+        text: "string - Truncated searchable text (max 1000 chars)"
+        createdAt: "string - ISO timestamp"
