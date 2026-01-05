@@ -57,12 +57,10 @@ egoGraphica/
 │   │   │   │   └── ToolResultRenderer.vue
 │   │   │   └── portfolio/
 │   │   │       └── WorkCard.vue
-│   │   ├── composables/
-│   │   │   ├── useApi.ts          # APIクライアント
-│   │   │   ├── useArtistChat.ts
-│   │   │   └── useAuth.ts
-│   │   └── plugins/
-│   │       └── firebase.client.ts
+│   │   └── composables/
+│   │       ├── useApi.ts          # APIクライアント
+│   │       ├── useArtistChat.ts
+│   │       └── useAuth.ts         # API経由の認証
 │   │
 │   └── api/                       # Nitro Server
 │       ├── nitro.config.ts
@@ -205,7 +203,6 @@ egoGraphica/
     "nuxt": "^4.0.0",
     "vue": "^3.5.0",
     "@ai-sdk/vue": "^1.0.0",
-    "firebase": "^11.0.0",
     "@egographica/shared": "*"
   },
   "devDependencies": {
@@ -243,11 +240,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:3001',
-      firebaseApiKey: process.env.NUXT_PUBLIC_FIREBASE_API_KEY,
-      firebaseAuthDomain: process.env.NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      firebaseProjectId: process.env.NUXT_PUBLIC_FIREBASE_PROJECT_ID,
-      firebaseStorageBucket: process.env.NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:3001'
     }
   }
 })
@@ -832,20 +825,17 @@ export { formatPrice, formatDate } from './utils/format'
 
 ```bash
 # Vercel: @egographica/web
-NUXT_PUBLIC_API_URL=https://api.ego-graphica.com
-NUXT_PUBLIC_FIREBASE_API_KEY=...
-NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NUXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NUXT_PUBLIC_API_URL=https://api.egographica.com
 
 # Vercel: @egographica/api
 ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
 PINECONE_API_KEY=...
-PINECONE_INDEX=...
+PINECONE_INDEX=egographica
 FIREBASE_PROJECT_ID=...
 FIREBASE_CLIENT_EMAIL=...
 FIREBASE_PRIVATE_KEY=...
-WEB_URL=https://ego-graphica.com
+WEB_URL=https://egographica.com
 ```
 
 ---
@@ -888,8 +878,8 @@ npm run lint
 │  │                     │         │                     │        │
 │  │  • UI Components    │         │  • /chat            │        │
 │  │  • Pages            │         │  • /ingest/*        │        │
-│  │  • Firebase Auth    │         │  • /artist/*        │        │
-│  │  • @ai-sdk/vue      │         │  • RAG Pipeline     │        │
+│  │  • @ai-sdk/vue      │         │  • /artist/*        │        │
+│  │                     │         │  • firebase-admin   │        │
 │  │                     │         │  • Vision Analysis  │        │
 │  └──────────┬──────────┘         └──────────┬──────────┘        │
 │             │                               │                    │
@@ -906,9 +896,13 @@ npm run lint
         ▼                     ▼                     ▼
   ┌──────────┐         ┌──────────┐         ┌──────────┐
   │ Firebase │         │ Pinecone │         │ Claude   │
-  │          │         │          │         │ 4.5 Opus │
-  │ • Auth   │         │ • Vector │         │ • Chat   │
-  │ • Store  │         │ • Search │         │ • Vision │
+  │ (Admin)  │         │          │         │ 4.5 Opus │
+  │          │         │ • Vector │         │          │
+  │ • Auth   │         │ • Search │         │ • Chat   │
+  │ • Store  │         │          │         │ • Vision │
   │ • Storage│         │          │         │          │
   └──────────┘         └──────────┘         └──────────┘
+
+※ Firebase操作はすべてAPIサーバー（firebase-admin）経由
+  クライアントにFirebase SDKは使用しない
 ```

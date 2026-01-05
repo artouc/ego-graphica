@@ -2,79 +2,73 @@
 
 ## コア技術
 
-### フロントエンド & フレームワーク
+### フロントエンド (apps/web)
 
 | 役割 | 技術 | バージョン | 理由 |
 |------|------|-----------|------|
-| フレームワーク | **Nuxt 4** | 4.x | SSR/SSG、Server Routes統合、Vue 3.5+対応 |
-| AI Chat UI | **Vercel AI SDK** | 4.x | `@ai-sdk/vue`でuseChat/useCompletion対応 |
-| UI Library | **Nuxt UI** or **Radix Vue** | - | アクセシブルなコンポーネント |
-| スタイリング | **Tailwind CSS** | 4.x | ユーティリティファースト |
+| フレームワーク | **Nuxt 4** | 4.x | SSR/SSG、Vue 3.5+対応 |
+| AI Chat UI | **Vercel AI SDK** | 4.x | `@ai-sdk/vue`でuseChat対応 |
+| スタイリング | **CSS** | - | シンプルに開始、後からTailwind追加可 |
+
+### バックエンド (apps/api)
+
+| 役割 | 技術 | バージョン | 理由 |
+|------|------|-----------|------|
+| サーバー | **Nitro** | 2.x | 軽量、Vercel/Cloudflare対応 |
+| バリデーション | **Zod** | 3.x | TypeScript統合、ランタイムチェック |
 
 ### LLM & AI
 
 | 役割 | 技術 | モデルID | 理由 |
 |------|------|----------|------|
-| メインLLM | **Claude 4.5 Opus** | `claude-opus-4-5-20250514` | 最高品質のペルソナ維持、長文コンテキスト200K |
-| Embedding | **OpenAI** | `text-embedding-3-small` | 1536次元、コスパ良好 |
-| 代替Embedding | **Voyage AI** | `voyage-3` | クリエイティブコンテンツ向け最適化 |
+| メインLLM | **Claude 4.5 Opus** | `claude-opus-4-5-20250514` | 最高品質のペルソナ維持、200Kコンテキスト |
+| Embedding | **OpenAI** | `text-embedding-3-large` | 3072次元、高精度 |
 | 音声文字起こし | **OpenAI Whisper** | `whisper-1` | 日本語対応、高精度 |
 
-### データベース & ストレージ
+### データベース & ストレージ (firebase-admin のみ)
 
-| 役割 | 技術 | プラン | 理由 |
-|------|------|--------|------|
-| Vector DB | **Pinecone** | Serverless | 無料枠あり、Vercel AI SDK統合 |
-| 認証 | **Firebase Auth** | Spark/Blaze | Google/Email認証、マルチテナント |
-| メタデータDB | **Firestore** | - | リアルタイム同期、柔軟なスキーマ |
-| ファイル保存 | **Firebase Storage** | - | 作品画像、音声ファイル |
+| 役割 | 技術 | 備考 |
+|------|------|------|
+| Vector DB | **Pinecone** | Serverless (GCP)、無料枠あり |
+| メタデータDB | **Firestore** | firebase-admin経由でサーバーサイドのみ |
+| ファイル保存 | **Firebase Storage** | firebase-admin経由でサーバーサイドのみ |
+| 認証 | **Firebase Auth** | firebase-admin経由、IDトークン検証 |
+
+> **重要**: クライアント側にFirebase SDKは使用しない。すべてのFirebase操作はAPIサーバー（firebase-admin）経由で行う。
 
 ### インフラ & デプロイ
 
 | 役割 | 技術 | 理由 |
 |------|------|------|
-| ホスティング | **Vercel** | Nuxt 4ネイティブ対応、Edge Functions |
+| ホスティング | **Vercel** | Nuxt/Nitroネイティブ対応 |
 | CDN | **Vercel Edge Network** | 自動最適化 |
-| モニタリング | **Vercel Analytics** | パフォーマンス計測 |
 
 ---
 
-## 依存パッケージ
+## Monorepo構成
 
-### package.json (想定)
-
-```json
-{
-  "name": "ego-graphica",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "nuxt dev",
-    "build": "nuxt build",
-    "preview": "nuxt preview",
-    "generate": "nuxt generate"
-  },
-  "dependencies": {
-    "nuxt": "^4.0.0",
-    "vue": "^3.5.0",
-
-    "ai": "^4.0.0",
-    "@ai-sdk/vue": "^1.0.0",
-    "@ai-sdk/anthropic": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0",
-
-    "@pinecone-database/pinecone": "^3.0.0",
-
-    "firebase": "^11.0.0",
-    "firebase-admin": "^12.0.0",
-
-    "zod": "^3.23.0"
-  },
-  "devDependencies": {
-    "@nuxt/devtools": "latest",
-    "typescript": "^5.6.0"
-  }
-}
+```
+egoGraphica/
+├── package.json              # npm workspaces
+├── turbo.json
+│
+├── apps/
+│   ├── web/                  # Nuxt 4 (UIのみ)
+│   │   └── dependencies:
+│   │       - nuxt
+│   │       - @ai-sdk/vue
+│   │       - @egographica/shared
+│   │
+│   └── api/                  # Nitro (I/O、認証、AI処理)
+│       └── dependencies:
+│           - nitropack
+│           - firebase-admin    ← サーバーサイドのみ
+│           - @ai-sdk/anthropic
+│           - @pinecone-database/pinecone
+│           - @egographica/shared
+│
+└── packages/
+    └── shared/               # 型定義、Zodスキーマ
 ```
 
 ---
@@ -90,73 +84,70 @@ OPENAI_API_KEY=sk-xxxxx
 
 # Pinecone
 PINECONE_API_KEY=xxxxx
-PINECONE_INDEX=ego-graphica
+PINECONE_INDEX=egographica
 
-# Firebase
-FIREBASE_PROJECT_ID=ego-graphica
-FIREBASE_CLIENT_EMAIL=xxxxx
-FIREBASE_PRIVATE_KEY=xxxxx
+# Firebase Admin (サーバーサイドのみ)
+FIREBASE_PROJECT_ID=egographica
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@egographica.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
-# Firebase Client (公開可)
-NUXT_PUBLIC_FIREBASE_API_KEY=xxxxx
-NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=ego-graphica.firebaseapp.com
-NUXT_PUBLIC_FIREBASE_PROJECT_ID=ego-graphica
-NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET=ego-graphica.appspot.com
+# URLs
+NUXT_PUBLIC_API_URL=http://localhost:3001
+WEB_URL=http://localhost:3000
 ```
 
 ---
 
-## ディレクトリ構成 (想定)
+## 認証フロー (firebase-admin)
 
 ```
-egoGraphica/
-├── nuxt.config.ts
-├── app.vue
-├── pages/
-│   ├── index.vue              # ランディング
-│   ├── artist/
-│   │   └── [id]/
-│   │       ├── index.vue      # アーティストページ
-│   │       └── chat.vue       # チャットUI
-│   └── dashboard/
-│       ├── index.vue          # 管理ダッシュボード
-│       ├── works.vue          # 作品管理
-│       └── persona.vue        # ペルソナ設定
-├── components/
-│   ├── chat/
-│   │   ├── ChatContainer.vue
-│   │   ├── MessageBubble.vue
-│   │   └── ToolResult.vue
-│   └── portfolio/
-│       └── WorkCard.vue
-├── composables/
-│   ├── useArtistChat.ts
-│   └── useFirebase.ts
-├── server/
-│   ├── api/
-│   │   ├── chat.post.ts       # メインチャットAPI
-│   │   ├── ingest/
-│   │   │   ├── work.post.ts   # 作品取り込み
-│   │   │   └── audio.post.ts  # 音声文字起こし
-│   │   └── artist/
-│   │       └── [id].get.ts    # アーティスト情報取得
-│   └── utils/
-│       ├── pinecone.ts
-│       ├── firebase-admin.ts
-│       └── embedding.ts
-├── types/
-│   ├── artist.ts
-│   ├── work.ts
-│   └── chat.ts
-└── llm/                        # このドキュメント群
-    ├── 00-overview.md
-    ├── 01-tech-stack.md
-    └── ...
+┌─────────────┐         ┌─────────────┐         ┌─────────────┐
+│   Client    │         │  API Server │         │  Firebase   │
+│  (Nuxt)     │         │  (Nitro)    │         │   Admin     │
+└──────┬──────┘         └──────┬──────┘         └──────┬──────┘
+       │                       │                       │
+       │  1. Login Request     │                       │
+       │  (email/password)     │                       │
+       │──────────────────────▶│                       │
+       │                       │  2. Verify/Create     │
+       │                       │──────────────────────▶│
+       │                       │                       │
+       │                       │  3. Custom Token      │
+       │                       │◀──────────────────────│
+       │  4. Return Token      │                       │
+       │◀──────────────────────│                       │
+       │                       │                       │
+       │  5. API Request       │                       │
+       │  (Bearer Token)       │                       │
+       │──────────────────────▶│                       │
+       │                       │  6. Verify Token      │
+       │                       │──────────────────────▶│
+       │                       │                       │
+       │                       │  7. User Info         │
+       │                       │◀──────────────────────│
+       │  8. Response          │                       │
+       │◀──────────────────────│                       │
 ```
+
+### 認証APIエンドポイント
+
+| エンドポイント | メソッド | 説明 |
+|---------------|---------|------|
+| `/auth/login` | POST | メール/パスワードでログイン |
+| `/auth/register` | POST | 新規ユーザー登録 |
+| `/auth/verify` | GET | トークン検証 |
+| `/auth/refresh` | POST | トークン更新 |
 
 ---
 
 ## 技術選定の根拠
+
+### なぜ firebase-admin のみか
+
+1. **セキュリティ**: クライアントにFirebase設定を露出しない
+2. **統一的なAPI**: すべてのデータ操作がAPIサーバー経由
+3. **キャッシュ制御**: サーバーサイドでキャッシュ戦略を制御可能
+4. **監査ログ**: すべての操作をサーバーで記録可能
 
 ### なぜ Claude 4.5 Opus か
 
@@ -170,11 +161,4 @@ egoGraphica/
 1. **Serverless**: コールドスタートなし、即座にスケール
 2. **Namespace**: アーティストごとにデータ分離が容易
 3. **無料枠**: 100K vectors/月まで無料
-4. **Vercel統合**: Edge Functionsからの低レイテンシアクセス
-
-### なぜ Firebase か
-
-1. **認証の即戦力**: Google/Email/Phone等、実装済み
-2. **Firestore柔軟性**: スキーマレスでプロトタイピング高速
-3. **Storage統合**: 大容量ファイル(作品画像、音声)の管理
-4. **リアルタイム**: チャット履歴の同期が容易
+4. **GCP対応**: Firebaseと同じクラウドプロバイダーで統一

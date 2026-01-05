@@ -34,8 +34,8 @@
 │  │                     │          │                     │       │
 │  │  • UI Components    │          │  • /chat (Stream)   │       │
 │  │  • Pages (SSR)      │          │  • /ingest/*        │       │
-│  │  • Firebase Auth    │          │  • RAG Pipeline     │       │
-│  │  • @ai-sdk/vue      │          │  • Vision Analysis  │       │
+│  │  • @ai-sdk/vue      │          │  • firebase-admin   │       │
+│  │                     │          │  • RAG Pipeline     │       │
 │  └──────────┬──────────┘          └──────────┬──────────┘       │
 │             │                                │                   │
 │             │    ┌─────────────────────┐     │                   │
