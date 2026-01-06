@@ -199,6 +199,22 @@ export default defineEventHandler(async (event: H3Event) => {
         .doc(session_id)
         .collection("messages")
 
+    // 過去の会話履歴を取得
+    const history_snapshot = await messages_ref.orderBy("created", "asc").limit(20).get()
+    const conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
+    for (const doc of history_snapshot.docs) {
+        const data = doc.data()
+        if (data.role && data.content) {
+            conversation_history.push({
+                role: data.role as "user" | "assistant",
+                content: data.content
+            })
+        }
+    }
+
+    // 現在のユーザーメッセージを追加
+    conversation_history.push({ role: "user", content: body.message })
+
     await messages_ref.add({
         role: "user",
         content: body.message,
@@ -210,14 +226,12 @@ export default defineEventHandler(async (event: H3Event) => {
     const model = provider_name === AIProvider.GROK ? getGrok() : getClaudeOpus()
 
     try {
-        console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`)
+        console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`, { history_count: conversation_history.length })
 
         const { text, toolCalls, steps } = await generateText({
             model,
             system: system_prompt,
-            messages: [
-                { role: "user", content: body.message }
-            ],
+            messages: conversation_history,
             maxSteps: 3,
             tools: {
                 showPortfolio: tool({
@@ -228,33 +242,36 @@ export default defineEventHandler(async (event: H3Event) => {
                     }),
                     execute: async ({ category, limit = 6 }) => {
                         console.log("showPortfolio called:", { bucket: body.bucket, category, limit })
+                        try {
+                            const works_snapshot = await db
+                                .collection(body.bucket)
+                                .doc("works")
+                                .collection("items")
+                                .orderBy("created", "desc")
+                                .limit(limit)
+                                .get()
 
-                        const works_snapshot = await db
-                            .collection(body.bucket)
-                            .doc("works")
-                            .collection("items")
-                            .orderBy("created", "desc")
-                            .limit(limit)
-                            .get()
+                            console.log("showPortfolio query result:", {
+                                path: `${body.bucket}/works/items`,
+                                docs_count: works_snapshot.docs.length,
+                                empty: works_snapshot.empty
+                            })
 
-                        console.log("showPortfolio query result:", {
-                            path: `${body.bucket}/works/items`,
-                            docs_count: works_snapshot.docs.length,
-                            empty: works_snapshot.empty
-                        })
+                            const works = works_snapshot.docs.map(doc => {
+                                const data = doc.data()
+                                return {
+                                    id: data.id,
+                                    title: data.title,
+                                    url: data.url,
+                                    status: data.status
+                                }
+                            })
 
-                        const works = works_snapshot.docs.map(doc => {
-                            const data = doc.data()
-                            console.log("Work doc:", { doc_id: doc.id, data_id: data.id, title: data.title })
-                            return {
-                                id: data.id,
-                                title: data.title,
-                                url: data.url,
-                                status: data.status
-                            }
-                        })
-
-                        return { works, total: works.length }
+                            return { works, total: works.length }
+                        } catch (e) {
+                            console.error("showPortfolio error:", e)
+                            return { works: [], total: 0, error: "作品の取得に失敗しました" }
+                        }
                     }
                 }),
                 searchWorks: tool({
@@ -263,17 +280,24 @@ export default defineEventHandler(async (event: H3Event) => {
                         query: z.string().describe("検索クエリ")
                     }),
                     execute: async ({ query }) => {
-                        const embedding = await generateEmbedding(query)
-                        const results = await queryVectors(body.bucket, embedding, 5, {
-                            sourcetype: "work"
-                        })
+                        console.log("searchWorks called:", { query })
+                        try {
+                            const embedding = await generateEmbedding(query)
+                            const results = await queryVectors(body.bucket, embedding, 5, {
+                                sourcetype: "work"
+                            })
+                            console.log("searchWorks results:", { count: results.length })
 
-                        return {
-                            works: results.map(r => ({
-                                id: r.metadata.source,
-                                title: r.metadata.title,
-                                score: r.score
-                            }))
+                            return {
+                                works: results.map(r => ({
+                                    id: r.metadata.source,
+                                    title: r.metadata.title,
+                                    score: r.score
+                                }))
+                            }
+                        } catch (e) {
+                            console.error("searchWorks error:", e)
+                            return { works: [], error: "検索に失敗しました" }
                         }
                     }
                 }),
