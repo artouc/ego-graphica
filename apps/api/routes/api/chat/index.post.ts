@@ -13,6 +13,9 @@ import { queryVectors } from "~/utils/pinecone"
 import { getGrok } from "~/utils/grok"
 import { getClaudeOpus } from "~/utils/anthropic"
 import { getCache, setCache, buildRagSummary } from "~/utils/cag"
+import { getCachedSessionHistory, setSessionCache, appendToSessionCache } from "~/utils/session-cache"
+import { getCachedVectorResults, setVectorCache } from "~/utils/vector-cache"
+import { estimateTokens, truncateToTokenLimit, getContextTokenBudget } from "~/utils/token-counter"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, AIProvider } from "@egographica/shared"
 import type { Persona } from "@egographica/shared"
@@ -41,6 +44,19 @@ function stripUndefined<T>(obj: T): T {
         return result as T
     }
     return obj
+}
+
+/**
+ * リアルタイムRAG検索が必要かどうかを判定
+ * キーワード検出による条件分岐でAPI呼び出しを削減
+ */
+function shouldUseRealtimeRag(message: string): boolean {
+    const search_keywords = [
+        "探して", "検索", "見つけて", "作品", "ポートフォリオ",
+        "過去の", "以前の", "前に", "絵", "イラスト", "デザイン",
+        "買いたい", "購入", "見せて", "見たい"
+    ]
+    return search_keywords.some(kw => message.includes(kw))
 }
 
 /** ペルソナからシステムプロンプトを生成（CAG） */
@@ -183,19 +199,33 @@ export default defineEventHandler(async (event: H3Event) => {
         setCache(body.bucket, persona, rag_summary)
     }
 
-    // リアルタイムRAG: クエリに関連するコンテンツを検索
+    // リアルタイムRAG: キーワードに基づいて条件分岐（コスト削減）
     let realtime_context = ""
-    try {
-        const query_embedding = await generateEmbedding(body.message)
-        const results = await queryVectors(body.bucket, query_embedding, 5)
+    if (shouldUseRealtimeRag(body.message)) {
+        console.log("Realtime RAG: Searching (keyword match detected)")
+        try {
+            const query_embedding = await generateEmbedding(body.message)
 
-        if (results.length > 0) {
-            realtime_context = results
-                .map((r, i) => `[${i + 1}] ${r.metadata.title}\n${r.metadata.text}`)
-                .join("\n\n")
+            // ベクター検索キャッシュをチェック
+            let results = getCachedVectorResults(body.bucket, query_embedding)
+            if (results) {
+                console.log("Vector cache HIT")
+            } else {
+                console.log("Vector cache MISS - querying Pinecone")
+                results = await queryVectors(body.bucket, query_embedding, 5)
+                setVectorCache(body.bucket, query_embedding, results)
+            }
+
+            if (results.length > 0) {
+                realtime_context = results
+                    .map((r, i) => `[${i + 1}] ${r.metadata.title}\n${r.metadata.text}`)
+                    .join("\n\n")
+            }
+        } catch (e) {
+            console.error("RAG search failed:", e)
         }
-    } catch (e) {
-        console.error("RAG search failed:", e)
+    } else {
+        console.log("Realtime RAG: Skipped (no keyword match)")
     }
 
     // CAGサマリー + リアルタイムRAGを結合
@@ -228,21 +258,51 @@ export default defineEventHandler(async (event: H3Event) => {
         .doc(session_id)
         .collection("messages")
 
-    // 過去の会話履歴を取得
-    const history_snapshot = await messages_ref.orderBy("created", "asc").limit(20).get()
-    const conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
-    for (const doc of history_snapshot.docs) {
-        const data = doc.data()
-        if (data.role && data.content) {
-            conversation_history.push({
-                role: data.role as "user" | "assistant",
-                content: data.content
-            })
+    // 過去の会話履歴を取得（キャッシュ優先）
+    let conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
+    const cached_history = getCachedSessionHistory(session_id)
+
+    if (cached_history) {
+        console.log("Session cache HIT")
+        conversation_history = cached_history as Array<{ role: "user" | "assistant"; content: string }>
+    } else {
+        console.log("Session cache MISS - loading from Firestore")
+        const history_snapshot = await messages_ref.orderBy("created", "asc").limit(20).get()
+        for (const doc of history_snapshot.docs) {
+            const data = doc.data()
+            if (data.role && data.content) {
+                conversation_history.push({
+                    role: data.role as "user" | "assistant",
+                    content: data.content
+                })
+            }
         }
+        // セッションキャッシュに保存
+        setSessionCache(session_id, conversation_history)
     }
 
     // 現在のユーザーメッセージを追加
     conversation_history.push({ role: "user", content: body.message })
+
+    // プロバイダーに応じてトークン制限を適用
+    const provider_name = persona?.provider || AIProvider.CLAUDE
+    const system_prompt_tokens = estimateTokens(system_prompt)
+    const token_budget = getContextTokenBudget(provider_name)
+    const available_tokens = token_budget - system_prompt_tokens - 4000 // レスポンス用に予約
+
+    console.log("Token budget:", {
+        provider: provider_name,
+        total_budget: token_budget,
+        system_prompt: system_prompt_tokens,
+        available_for_history: available_tokens
+    })
+
+    // トークン制限を超える場合は古いメッセージを切り詰め
+    const trimmed_history = truncateToTokenLimit(conversation_history, token_budget, system_prompt_tokens + 4000)
+    if (trimmed_history.length < conversation_history.length) {
+        console.log(`History truncated: ${conversation_history.length} -> ${trimmed_history.length} messages`)
+    }
+    conversation_history = trimmed_history
 
     await messages_ref.add({
         role: "user",
@@ -251,7 +311,6 @@ export default defineEventHandler(async (event: H3Event) => {
     })
 
     // プロバイダーに応じてモデルを選択
-    const provider_name = persona?.provider || AIProvider.CLAUDE
     const model = provider_name === AIProvider.GROK ? getGrok() : getClaudeOpus()
 
     try {
@@ -434,6 +493,9 @@ export default defineEventHandler(async (event: H3Event) => {
             tools: cleaned_tool_calls,
             created: FieldValue.serverTimestamp()
         })
+
+        // セッションキャッシュを更新（ユーザーとアシスタントのメッセージを追加）
+        appendToSessionCache(session_id, { role: "assistant", content: full_response || "" })
 
         await db
             .collection(body.bucket)
