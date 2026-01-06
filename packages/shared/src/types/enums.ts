@@ -2,16 +2,6 @@
  * ego Graphica - 列挙型定義
  */
 
-/** ペルソナの話し方トーン */
-export const PersonaTone = {
-    FORMAL: "formal",
-    FRIENDLY: "friendly",
-    ARTISTIC: "artistic",
-    PROFESSIONAL: "professional",
-    PLAYFUL: "playful"
-} as const
-export type PersonaTone = (typeof PersonaTone)[keyof typeof PersonaTone]
-
 /** 作品ファイル形式 */
 export const FileType = {
     PNG: "png",
@@ -62,7 +52,6 @@ export type SourceType = (typeof SourceType)[keyof typeof SourceType]
 
 /** AIプロバイダー */
 export const AIProvider = {
-    CLAUDE: "claude",
-    GROK: "grok"
+    CLAUDE: "claude"
 } as const
 export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]

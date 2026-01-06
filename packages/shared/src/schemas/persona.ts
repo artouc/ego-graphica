@@ -3,7 +3,6 @@
  */
 
 import { z } from "zod"
-import { PersonaTone } from "../types/enums"
 
 /** 理想的な応答例スキーマ */
 export const sampleResponseSchema = z.object({
@@ -16,13 +15,6 @@ export const sampleResponseSchema = z.object({
 export const personaSchema = z.object({
     character: z.string().optional(),
     motif: z.string().min(1, "モチーフを入力してください"),
-    tone: z.enum([
-        PersonaTone.FORMAL,
-        PersonaTone.FRIENDLY,
-        PersonaTone.ARTISTIC,
-        PersonaTone.PROFESSIONAL,
-        PersonaTone.PLAYFUL
-    ]),
     philosophy: z.string().optional(),
     influences: z.array(z.string()).min(1, "少なくとも1つの影響を受けた作家・文化を入力してください"),
     samples: z.array(sampleResponseSchema).min(1, "少なくとも1つの応答例を入力してください"),

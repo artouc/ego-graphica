@@ -5,19 +5,16 @@
 
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { FieldValue } from "firebase-admin/firestore"
-import { generateText, tool } from "ai"
-import { z } from "zod"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { queryVectors } from "~/utils/pinecone"
-import { getGrok } from "~/utils/grok"
-import { getClaudeOpus } from "~/utils/anthropic"
+import { getAnthropicSDKClient } from "~/utils/anthropic"
 import { getCache, setCache, buildRagSummary } from "~/utils/cag"
 import { getCachedSessionHistory, setSessionCache, appendToSessionCache } from "~/utils/session-cache"
 import { getCachedVectorResults, setVectorCache } from "~/utils/vector-cache"
 import { estimateTokens, truncateToTokenLimit, getContextTokenBudget } from "~/utils/token-counter"
 import { success, validationError, serverError } from "~/utils/response"
-import { LOG, ERROR, AIProvider } from "@egographica/shared"
+import { LOG, ERROR } from "@egographica/shared"
 import type { Persona } from "@egographica/shared"
 
 interface RequestBody {
@@ -47,16 +44,16 @@ function stripUndefined<T>(obj: T): T {
 }
 
 /**
- * リアルタイムRAG検索が必要かどうかを判定
- * キーワード検出による条件分岐でAPI呼び出しを削減
+ * リアルタイムRAG検索をスキップすべきかどうかを判定
+ * 明らかに不要な場合（挨拶のみ）のみスキップ
  */
-function shouldUseRealtimeRag(message: string): boolean {
-    const search_keywords = [
-        "探して", "検索", "見つけて", "作品", "ポートフォリオ",
-        "過去の", "以前の", "前に", "絵", "イラスト", "デザイン",
-        "買いたい", "購入", "見せて", "見たい"
-    ]
-    return search_keywords.some(kw => message.includes(kw))
+function shouldSkipRealtimeRag(message: string): boolean {
+    // 非常に短いメッセージ（挨拶など）はスキップ
+    if (message.length < 10) {
+        const greetings = ["こんにちは", "こんばんは", "おはよう", "ありがとう", "はい", "いいえ"]
+        return greetings.some(g => message.includes(g))
+    }
+    return false
 }
 
 /** ペルソナからシステムプロンプトを生成（CAG） */
@@ -71,9 +68,6 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
         if (persona.motif) {
             prompt += `\nモチーフ: ${persona.motif}`
         }
-        if (persona.tone) {
-            prompt += `\n話し方: ${getToneDescription(persona.tone)}`
-        }
         if (persona.philosophy) {
             prompt += `\n創作哲学: ${persona.philosophy}`
         }
@@ -82,44 +76,18 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
             prompt += `\n影響を受けた作家・文化: ${persona.influences.join("、")}`
         }
 
-        // 文体スタイル（重要：これに厳密に従う）
+        // 文体スタイル（参考程度）
         if (persona.writing_style) {
             const style = persona.writing_style
-            prompt += `\n\n## 文体スタイル（厳守）`
+            prompt += `\n\n## 文体の参考（自然に取り入れる程度で）`
             prompt += `\n${style.description}`
-            prompt += `\n\n### 文末表現`
-            prompt += `\n使用する文末: ${style.sentence_endings.join("、")}`
-            prompt += `\n\n### 句読点ルール`
-            if (!style.punctuation.uses_exclamation) {
-                prompt += `\n- 感嘆符（！）は使用しない`
-            }
-            if (!style.punctuation.uses_emoji) {
-                prompt += `\n- 絵文字は使用しない`
-            }
-            if (!style.punctuation.uses_question_marks) {
-                prompt += `\n- 疑問符（？）の多用は避ける`
-            }
-            prompt += `\n- 句点: ${style.punctuation.period_style}`
-            prompt += `\n- 読点: ${style.punctuation.comma_style}`
-            prompt += `\n\n### フォーマル度: ${Math.round(style.formality_level * 100)}%`
-
-            if (style.characteristic_phrases.length > 0) {
-                prompt += `\n\n### 特徴的な表現`
-                prompt += `\n${style.characteristic_phrases.join("、")}`
-            }
-
-            if (style.avoid_patterns.length > 0) {
-                prompt += `\n\n### 絶対に使用しない表現`
-                prompt += `\n${style.avoid_patterns.join("、")}`
-            }
+            // 詳細な文末・句読点ルールは省略（重みを下げる）
         }
 
-        // サンプル文（実際のアーティストの文章）
+        // サンプル文（参考程度）
         if (persona.style_samples && persona.style_samples.length > 0) {
-            prompt += `\n\n## アーティスト本人の文章例（この文体を模倣）`
-            for (const sample of persona.style_samples) {
-                prompt += `\n「${sample}」`
-            }
+            prompt += `\n\n## 文章例（参考程度）`
+            prompt += `\n「${persona.style_samples[0]}」` // 1つだけ表示
         }
 
         if (persona.avoidances && persona.avoidances.length > 0) {
@@ -140,27 +108,24 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
         prompt += `\n\n## 参考情報（RAG）\n以下の情報を参考にして回答してください:\n\n${context}`
     }
 
-    prompt += `\n\n## 注意事項
+    prompt += `\n\n## 応答スタイル（最重要）
+- **超短文**: 1文、長くても2文まで。人間のチャットのように短く。
+- **自然な会話**: 「〜ですね」「〜かな」のような口語的な終わり方
+- **自己評価**: 回答後、shouldKeepTalking を呼んで足りなければ追加メッセージを送る
+- **分割して話す**: 長くなりそうなら複数メッセージに分ける
+
+## 注意事項
 - 顧客に対して丁寧に、でもアーティストらしい個性を持って対応してください
 - 作品について聞かれた場合は、参考情報を元に具体的に説明してください
-- わからないことは正直に「確認します」と伝えてください
-- 文体スタイルの指定がある場合は、それに厳密に従ってください（特に絵文字・感嘆符の使用禁止）`
+- わからないことは正直に「確認します」と伝えてください`
 
     return prompt
 }
 
-function getToneDescription(tone: string): string {
-    const tones: Record<string, string> = {
-        formal: "丁寧でフォーマルな話し方",
-        friendly: "親しみやすくフレンドリーな話し方",
-        artistic: "芸術的で詩的な表現を使う話し方",
-        professional: "プロフェッショナルでビジネスライクな話し方",
-        playful: "遊び心があり、ユーモアを交えた話し方"
-    }
-    return tones[tone] || "自然な話し方"
-}
-
 export default defineEventHandler(async (event: H3Event) => {
+    const total_start = Date.now()
+    const timings: Record<string, number> = {}
+
     const body = await readBody<RequestBody>(event)
 
     if (!body.bucket || !body.message) {
@@ -172,6 +137,7 @@ export default defineEventHandler(async (event: H3Event) => {
     const db = getFirestoreInstance()
 
     // CAG: キャッシュからペルソナとRAGサマリーを取得
+    const cag_start = Date.now()
     let persona: Persona | null = null
     let rag_summary = ""
     const cached = getCache(body.bucket)
@@ -198,15 +164,24 @@ export default defineEventHandler(async (event: H3Event) => {
         // キャッシュに保存
         setCache(body.bucket, persona, rag_summary)
     }
+    timings.cag = Date.now() - cag_start
 
-    // リアルタイムRAG: キーワードに基づいて条件分岐（コスト削減）
+    // リアルタイムRAG: 基本的に常に実行（挨拶のみスキップ）
+    const rag_start = Date.now()
     let realtime_context = ""
-    if (shouldUseRealtimeRag(body.message)) {
-        console.log("Realtime RAG: Searching (keyword match detected)")
+    if (shouldSkipRealtimeRag(body.message)) {
+        console.log("Realtime RAG: Skipped (greeting/short message)")
+        timings.embedding = 0
+        timings.vector_search = 0
+    } else {
+        console.log("Realtime RAG: Searching...")
         try {
+            const embed_start = Date.now()
             const query_embedding = await generateEmbedding(body.message)
+            timings.embedding = Date.now() - embed_start
 
             // ベクター検索キャッシュをチェック
+            const vector_start = Date.now()
             let results = getCachedVectorResults(body.bucket, query_embedding)
             if (results) {
                 console.log("Vector cache HIT")
@@ -215,6 +190,7 @@ export default defineEventHandler(async (event: H3Event) => {
                 results = await queryVectors(body.bucket, query_embedding, 5)
                 setVectorCache(body.bucket, query_embedding, results)
             }
+            timings.vector_search = Date.now() - vector_start
 
             if (results.length > 0) {
                 realtime_context = results
@@ -224,9 +200,8 @@ export default defineEventHandler(async (event: H3Event) => {
         } catch (e) {
             console.error("RAG search failed:", e)
         }
-    } else {
-        console.log("Realtime RAG: Skipped (no keyword match)")
     }
+    timings.rag_total = Date.now() - rag_start
 
     // CAGサマリー + リアルタイムRAGを結合
     let context = ""
@@ -259,6 +234,7 @@ export default defineEventHandler(async (event: H3Event) => {
         .collection("messages")
 
     // 過去の会話履歴を取得（キャッシュ優先）
+    const history_start = Date.now()
     let conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
     const cached_history = getCachedSessionHistory(session_id)
 
@@ -280,20 +256,21 @@ export default defineEventHandler(async (event: H3Event) => {
         // セッションキャッシュに保存
         setSessionCache(session_id, conversation_history)
     }
+    timings.history = Date.now() - history_start
 
     // 現在のユーザーメッセージを追加
     conversation_history.push({ role: "user", content: body.message })
 
-    // プロバイダーに応じてトークン制限を適用
-    const provider_name = persona?.provider || AIProvider.CLAUDE
+    // トークン制限を適用（Claude固定）
     const system_prompt_tokens = estimateTokens(system_prompt)
-    const token_budget = getContextTokenBudget(provider_name)
+    const token_budget = getContextTokenBudget("claude")
     const available_tokens = token_budget - system_prompt_tokens - 4000 // レスポンス用に予約
 
     console.log("Token budget:", {
-        provider: provider_name,
         total_budget: token_budget,
-        system_prompt: system_prompt_tokens,
+        system_prompt_tokens: system_prompt_tokens,
+        system_prompt_chars: system_prompt.length,
+        history_messages: conversation_history.length,
         available_for_history: available_tokens
     })
 
@@ -310,192 +287,139 @@ export default defineEventHandler(async (event: H3Event) => {
         created: FieldValue.serverTimestamp()
     })
 
-    // プロバイダーに応じてモデルを選択
-    const model = provider_name === AIProvider.GROK ? getGrok() : getClaudeOpus()
-
     try {
-        console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`, { history_count: conversation_history.length })
+        console.log("Calling Claude API...", { history_count: conversation_history.length })
 
-        // ツールコーリング無効化中
-        const { text } = await generateText({
-            model,
-            system: system_prompt,
-            messages: conversation_history
-            // maxSteps: 3,
-            // tools: { ... } - 下記コメントアウト参照
-        })
-        const toolCalls: unknown[] = []
-        const steps: unknown[] = []
-
-        /* ツールコーリング（一時無効化）
-        const { text, toolCalls, steps } = await generateText({
-            model,
-            system: system_prompt,
-            messages: conversation_history,
-            maxSteps: 3,
-            tools: {
-                showPortfolio: tool({
-                    description: "作品ポートフォリオを表示する",
-                    parameters: z.object({
-                        category: z.string().optional().describe("カテゴリでフィルター"),
-                        limit: z.number().optional().describe("表示件数")
-                    }),
-                    execute: async ({ category, limit = 6 }) => {
-                        console.log("showPortfolio called:", { bucket: body.bucket, category, limit })
-                        try {
-                            const works_snapshot = await db
-                                .collection(body.bucket)
-                                .doc("works")
-                                .collection("items")
-                                .orderBy("created", "desc")
-                                .limit(limit)
-                                .get()
-
-                            console.log("showPortfolio query result:", {
-                                path: `${body.bucket}/works/items`,
-                                docs_count: works_snapshot.docs.length,
-                                empty: works_snapshot.empty
-                            })
-
-                            const works = works_snapshot.docs.map(doc => {
-                                const data = doc.data()
-                                return {
-                                    id: data.id,
-                                    title: data.title,
-                                    url: data.url,
-                                    status: data.status
-                                }
-                            })
-
-                            return { works, total: works.length }
-                        } catch (e) {
-                            console.error("showPortfolio error:", e)
-                            return { works: [], total: 0, error: "作品の取得に失敗しました" }
+        // Anthropic SDKを直接使用（AI SDKのバグを回避）
+        const anthropic = getAnthropicSDKClient()
+        
+        // ツール定義（Anthropic SDK形式）
+        const tools = [
+            {
+                name: "shouldKeepTalking",
+                description: "回答の後に必ず呼び出す。追加で話すべき内容があるか評価する。",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        have_more_to_say: {
+                            type: "boolean",
+                            description: "まだ伝えたいことがあるならtrue、十分ならfalse"
+                        },
+                        next_topic: {
+                            type: "string",
+                            description: "次に話す内容、または「なし」"
                         }
-                    }
-                }),
-                searchWorks: tool({
-                    description: "キーワードや要望に合った作品を検索する",
-                    parameters: z.object({
-                        query: z.string().describe("検索クエリ")
-                    }),
-                    execute: async ({ query }) => {
-                        console.log("searchWorks called:", { query })
-                        try {
-                            const embedding = await generateEmbedding(query)
-                            const results = await queryVectors(body.bucket, embedding, 5, {
-                                sourcetype: "work"
-                            })
-                            console.log("searchWorks results:", { count: results.length })
-
-                            return {
-                                works: results.map(r => ({
-                                    id: r.metadata.source,
-                                    title: r.metadata.title,
-                                    score: r.score
-                                }))
-                            }
-                        } catch (e) {
-                            console.error("searchWorks error:", e)
-                            return { works: [], error: "検索に失敗しました" }
-                        }
-                    }
-                }),
-                generateQuote: tool({
-                    description: "概算見積もりを生成する",
-                    parameters: z.object({
-                        project_type: z.string().describe("プロジェクトの種類"),
-                        description: z.string().describe("プロジェクトの説明"),
-                        urgent: z.boolean().optional().describe("急ぎ対応かどうか")
-                    }),
-                    execute: async ({ project_type, description, urgent }) => {
-                        return {
-                            project_type,
-                            description,
-                            urgent: urgent || false,
-                            note: "正式な見積もりは別途ご相談ください",
-                            contact_required: true
-                        }
-                    }
-                })
-            }
-        })
-        ツールコーリング（一時無効化）ここまで */
-
-        console.log(`${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API response received`)
-        console.log("generateText result:", {
-            text_length: text?.length || 0,
-            text_preview: text?.slice(0, 200) || "(empty)",
-            toolCalls_count: toolCalls?.length || 0,
-            steps_count: steps?.length || 0
-        })
-        // stepsの詳細をログ
-        if (steps && steps.length > 0) {
-            for (let i = 0; i < steps.length; i++) {
-                const step = steps[i]
-                console.log(`Step ${i}:`, {
-                    text: step.text?.slice(0, 100) || "(empty)",
-                    toolCalls: step.toolCalls?.length || 0,
-                    toolResults: step.toolResults?.length || 0,
-                    toolResultsData: step.toolResults ? JSON.stringify(step.toolResults, null, 2).slice(0, 500) : null
-                })
-            }
-        }
-
-        // テキストが空でツール結果がある場合、ツール結果を元にレスポンスを構築
-        let full_response = text
-        if (!text && steps && steps.length > 0) {
-            const tool_results: string[] = []
-            for (const step of steps) {
-                if (step.toolResults && step.toolResults.length > 0) {
-                    for (const tr of step.toolResults) {
-                        // Vercel AI SDK v6では結果は `output` に入る
-                        const output = (tr as { output?: unknown }).output
-                        if (tr.toolName === "showPortfolio" && output) {
-                            const portfolio = output as { works: Array<{ title: string; status: string; url: string }>; total: number }
-                            if (portfolio.works && portfolio.works.length > 0) {
-                                tool_results.push(`作品一覧（${portfolio.total}件）:`)
-                                for (const work of portfolio.works) {
-                                    tool_results.push(`- ${work.title}${work.status === "sold" ? "（売約済み）" : ""}`)
-                                }
-                            } else {
-                                tool_results.push("現在登録されている作品はありません。")
-                            }
-                        } else if (tr.toolName === "searchWorks" && output) {
-                            const search = output as { works: Array<{ title: string; score: number }> }
-                            if (search.works && search.works.length > 0) {
-                                tool_results.push("検索結果:")
-                                for (const work of search.works) {
-                                    tool_results.push(`- ${work.title}`)
-                                }
-                            } else {
-                                tool_results.push("該当する作品が見つかりませんでした。")
-                            }
-                        } else if (tr.toolName === "generateQuote" && output) {
-                            const quote = output as { project_type: string; description: string; note: string }
-                            tool_results.push(`お見積りのご依頼ありがとうございます。`)
-                            tool_results.push(`プロジェクト: ${quote.project_type}`)
-                            tool_results.push(`${quote.note}`)
-                        }
-                    }
+                    },
+                    required: ["have_more_to_say", "next_topic"]
                 }
             }
-            if (tool_results.length > 0) {
-                full_response = tool_results.join("\n")
+        ]
+
+        const ai_start = Date.now()
+        
+        // Anthropic SDKを使用してAPI呼び出し
+        const response_messages: string[] = []
+        let current_messages = conversation_history.map(msg => ({
+            role: msg.role as "user" | "assistant",
+            content: msg.content
+        }))
+        
+        // maxStepsの代わりに手動でループ（最大5回）
+        let shouldContinue = true
+        for (let step = 0; step < 5 && shouldContinue; step++) {
+            const response = await anthropic.messages.create({
+                model: "claude-opus-4-5",
+                max_tokens: 350,
+                system: system_prompt,
+                messages: current_messages,
+                tools: step === 0 ? tools : undefined // 最初のステップのみツールを提供
+            })
+            
+            // アシスタントの応答全体をメッセージに追加（テキストとtool_useの両方を含む）
+            const assistantContent: Array<{ type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown }> = []
+            
+            // テキストを追加
+            for (const content of response.content) {
+                if (content.type === "text") {
+                    response_messages.push(content.text)
+                    assistantContent.push({
+                        type: "text",
+                        text: content.text
+                    })
+                } else if (content.type === "tool_use") {
+                    assistantContent.push({
+                        type: "tool_use",
+                        id: content.id,
+                        name: content.name,
+                        input: content.input
+                    })
+                }
             }
+            
+            // アシスタントの応答をメッセージ履歴に追加
+            current_messages.push({
+                role: "assistant",
+                content: assistantContent
+            })
+            
+            // ツール呼び出しを処理
+            const toolUseBlocks = response.content.filter((c): c is { type: "tool_use"; id: string; name: string; input: unknown } => c.type === "tool_use")
+            
+            if (toolUseBlocks.length === 0) {
+                shouldContinue = false // ツール呼び出しがない場合は終了
+                break
+            }
+            
+            // ツール実行結果を追加
+            const toolResults = []
+            for (const toolUse of toolUseBlocks) {
+                if (toolUse.name === "shouldKeepTalking") {
+                    const { have_more_to_say, next_topic } = toolUse.input as { have_more_to_say: boolean; next_topic: string }
+                    console.log("shouldKeepTalking:", { have_more_to_say, next_topic })
+                    
+                    if (!have_more_to_say) {
+                        // 続ける必要がない場合は終了
+                        shouldContinue = false
+                        break
+                    }
+                    
+                    toolResults.push({
+                        type: "tool_result" as const,
+                        tool_use_id: toolUse.id,
+                        content: JSON.stringify({ continue: true, topic: next_topic })
+                    })
+                }
+            }
+            
+            if (toolResults.length === 0 || !shouldContinue) {
+                shouldContinue = false // ツール実行結果がない場合は終了
+                break
+            }
+            
+            // ツール実行結果をメッセージに追加
+            current_messages.push({
+                role: "user",
+                content: toolResults
+            })
         }
+        
+        timings.ai_call = Date.now() - ai_start
 
-        const cleaned_tool_calls = toolCalls && toolCalls.length > 0 ? stripUndefined(toolCalls) : null
-
-        await messages_ref.add({
-            role: "assistant",
-            content: full_response,
-            tools: cleaned_tool_calls,
-            created: FieldValue.serverTimestamp()
+        console.log("Claude API response received")
+        console.log("Response:", {
+            messages_count: response_messages.length,
+            messages_preview: response_messages.map(m => m.slice(0, 100))
         })
 
-        // セッションキャッシュを更新（ユーザーとアシスタントのメッセージを追加）
-        appendToSessionCache(session_id, { role: "assistant", content: full_response || "" })
+        // 各メッセージをFirestoreに保存
+        for (const msg of response_messages) {
+            await messages_ref.add({
+                role: "assistant",
+                content: msg,
+                created: FieldValue.serverTimestamp()
+            })
+            appendToSessionCache(session_id, { role: "assistant", content: msg })
+        }
 
         await db
             .collection(body.bucket)
@@ -504,18 +428,47 @@ export default defineEventHandler(async (event: H3Event) => {
             .doc(session_id)
             .update({
                 updated: FieldValue.serverTimestamp(),
-                messages: FieldValue.increment(2)
+                messages: FieldValue.increment(1 + response_messages.length) // user + assistant messages
             })
+
+        timings.total = Date.now() - total_start
+
+        // パフォーマンスレポート
+        console.log("⏱️ PERFORMANCE REPORT:", {
+            cag_ms: timings.cag,
+            embedding_ms: timings.embedding,
+            vector_search_ms: timings.vector_search,
+            rag_total_ms: timings.rag_total,
+            history_ms: timings.history,
+            ai_call_ms: timings.ai_call,
+            total_ms: timings.total,
+            response_count: response_messages.length,
+            bottleneck: Object.entries(timings)
+                .filter(([k]) => k !== "total")
+                .sort(([, a], [, b]) => b - a)[0]
+        })
 
         console.log(LOG.AI.CHAT_GENERATED)
 
         return success(event, {
             session_id,
-            message: full_response,
-            tools: cleaned_tool_calls || []
+            messages: response_messages, // 複数メッセージを配列で返す
+            _debug: {
+                timings,
+                rag: realtime_context || "(スキップ)",
+                cag: {
+                    persona: persona ? {
+                        character: persona.character,
+                        philosophy: persona.philosophy,
+                        writing_style: persona.writing_style?.description
+                    } : null,
+                    rag_summary: rag_summary || "(なし)"
+                },
+                context_injection: context || "(なし)"
+            }
         })
     } catch (e) {
         console.error("Chat generation failed:", e)
-        serverError(provider_name === AIProvider.GROK ? ERROR.SERVICE.XAI_ERROR : ERROR.SERVICE.ANTHROPIC_ERROR)
+        serverError(ERROR.SERVICE.ANTHROPIC_ERROR)
     }
 })

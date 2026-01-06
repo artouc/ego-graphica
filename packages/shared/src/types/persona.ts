@@ -3,7 +3,7 @@
  * Firestore: /{bucket}/persona
  */
 
-import type { PersonaTone, AIProvider } from "./enums"
+import type { AIProvider } from "./enums"
 
 /** 理想的な応答例 */
 export interface SampleResponse {
@@ -53,8 +53,6 @@ export interface Persona {
     character?: string
     /** モチーフ（カエル、猫など） */
     motif: string
-    /** 話し方のトーン */
-    tone: PersonaTone
     /** 創作哲学 */
     philosophy?: string
     /** 影響を受けた作家・文化 */
@@ -75,7 +73,6 @@ export interface Persona {
 export interface PersonaUpsert {
     character?: string
     motif: string
-    tone: PersonaTone
     philosophy?: string
     influences: string[]
     samples: SampleResponse[]
