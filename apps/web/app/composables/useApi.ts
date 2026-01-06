@@ -13,17 +13,14 @@ export function useApi() {
         options: {
             method?: "GET" | "POST" | "PUT" | "DELETE"
             body?: unknown
-            requireAuth?: boolean
         } = {}
     ): Promise<T> {
-        const { method = "GET", body, requireAuth = false } = options
+        const { method = "GET", body } = options
 
         const headers: Record<string, string> = {
-            "Content-Type": "application/json"
-        }
-
-        if (requireAuth && auth.token.value) {
-            headers["Authorization"] = `Bearer ${auth.token.value}`
+            "Content-Type": "application/json",
+            "X-API-Key": config.public.masterApiKey,
+            "X-Bucket": auth.bucket.value
         }
 
         const response = await $fetch<ApiResponse<T>>(`${config.public.apiUrl}${path}`, {
@@ -40,16 +37,16 @@ export function useApi() {
     }
 
     return {
-        get: <T>(path: string, requireAuth = false) =>
-            request<T>(path, { method: "GET", requireAuth }),
+        get: <T>(path: string) =>
+            request<T>(path, { method: "GET" }),
 
-        post: <T>(path: string, body: unknown, requireAuth = false) =>
-            request<T>(path, { method: "POST", body, requireAuth }),
+        post: <T>(path: string, body: unknown) =>
+            request<T>(path, { method: "POST", body }),
 
-        put: <T>(path: string, body: unknown, requireAuth = false) =>
-            request<T>(path, { method: "PUT", body, requireAuth }),
+        put: <T>(path: string, body: unknown) =>
+            request<T>(path, { method: "PUT", body }),
 
-        delete: <T>(path: string, requireAuth = false) =>
-            request<T>(path, { method: "DELETE", requireAuth })
+        delete: <T>(path: string) =>
+            request<T>(path, { method: "DELETE" })
     }
 }

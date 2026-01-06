@@ -24,11 +24,11 @@ export function getAnthropicClient(): ReturnType<typeof createAnthropic> {
 /** Claude Opus 4.5 モデルを取得 */
 export function getClaudeOpus() {
     const anthropic = getAnthropicClient()
-    return anthropic("claude-opus-4-5")
+    return anthropic("claude-opus-4-5-20251101")
 }
 
 /** Claude Sonnet 4.5 モデルを取得 */
 export function getClaudeSonnet() {
     const anthropic = getAnthropicClient()
-    return anthropic("claude-sonnet-4-5")
+    return anthropic("claude-sonnet-4-5-20250514")
 }

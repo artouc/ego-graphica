@@ -33,7 +33,11 @@ async function handleUpload() {
 
             await $fetch(`${config.public.apiUrl}/api/ingest/file`, {
                 method: "POST",
-                body: formData
+                body: formData,
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": auth.bucket.value
+                }
             })
         }
 

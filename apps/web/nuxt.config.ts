@@ -1,8 +1,5 @@
 export default defineNuxtConfig({
     compatibilityDate: "2025-01-06",
-    future: {
-        compatibilityVersion: 4
-    },
     srcDir: "app",
     devServer: {
         port: 3010
@@ -15,7 +12,8 @@ export default defineNuxtConfig({
     ],
     runtimeConfig: {
         public: {
-            apiUrl: process.env.NUXT_PUBLIC_API_URL
+            apiUrl: process.env.NUXT_PUBLIC_API_URL,
+            masterApiKey: process.env.NUXT_PUBLIC_MASTER_API_KEY
         }
     },
     typescript: {

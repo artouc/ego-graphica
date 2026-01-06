@@ -32,12 +32,26 @@ export default defineEventHandler(async (event: H3Event) => {
     }
 
     const authorization = getHeader(event, "authorization")
+    const api_key = getHeader(event, "x-api-key")
+    const master_api_key = process.env.MASTER_API_KEY
+
+    console.log("DEBUG:", { api_key, master_api_key, envKeys: Object.keys(process.env).filter(k => k.includes("MASTER")) })
+
+    // マスターAPIキーによる認証
+    if (api_key && master_api_key && api_key === master_api_key) {
+        event.context.auth = {
+            uid: "master",
+            email: "master@egographica.local",
+            bucket: getHeader(event, "x-bucket") || ""
+        }
+        return
+    }
 
     if (!authorization || !authorization.startsWith("Bearer ")) {
         unauthorized(ERROR.AUTH.UNAUTHORIZED)
     }
 
-    const token = authorization.slice(7)
+    const token = authorization!.slice(7)
 
     try {
         const auth = getAuthInstance()

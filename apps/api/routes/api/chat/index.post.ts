@@ -5,7 +5,7 @@
 
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { FieldValue } from "firebase-admin/firestore"
-import { streamText, tool } from "ai"
+import { generateText, tool } from "ai"
 import { z } from "zod"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
@@ -140,7 +140,9 @@ export default defineEventHandler(async (event: H3Event) => {
     const model = getClaudeOpus()
 
     try {
-        const { text, toolCalls } = await streamText({
+        console.log("Calling Claude API...")
+
+        const { text, toolCalls } = await generateText({
             model,
             system: system_prompt,
             messages: [
@@ -212,7 +214,9 @@ export default defineEventHandler(async (event: H3Event) => {
             }
         })
 
-        const full_response = await text
+        console.log("Claude API response received")
+
+        const full_response = text
 
         await messages_ref.add({
             role: "assistant",

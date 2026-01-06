@@ -37,6 +37,10 @@ async function handleSend() {
             `${config.public.apiUrl}/api/chat`,
             {
                 method: "POST",
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": bucket.value
+                },
                 body: {
                     bucket: bucket.value,
                     message: user_message,

@@ -1,6 +1,13 @@
 /**
  * ego Graphica - ファイルアップロードAPI
  * POST /api/ingest/file
+ *
+ * Storage構造:
+ * - /{bucket}/data/raw/{filename} - 生データ
+ * - /{bucket}/data/{file_id}/pdf.txt - PDFテキスト
+ * - /{bucket}/data/{file_id}/pdf-1.png - PDFページ画像
+ * - /{bucket}/data/{file_id}/audio.txt - 音声文字起こし
+ * - /{bucket}/data/{file_id}/image.json - 画像解析結果
  */
 
 import { defineEventHandler, readMultipartFormData, H3Event } from "h3"
@@ -8,10 +15,11 @@ import { FieldValue } from "firebase-admin/firestore"
 import { getFirestoreInstance, getStorageInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { upsertVectors } from "~/utils/pinecone"
-import { analyzeImage, analyzePdf, transcribeAudio, bufferToBase64 } from "~/utils/ai"
+import { analyzeImage, extractPdfContent, transcribeAudio, bufferToBase64 } from "~/utils/ai"
+import { chunkText } from "~/utils/chunking"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
-import type { VectorMetadata } from "@egographica/shared"
+import type { VectorMetadata, VectorUpsert } from "@egographica/shared"
 
 const ALLOWED_TYPES = {
     "application/pdf": "pdf",
@@ -26,18 +34,31 @@ const ALLOWED_TYPES = {
     "video/mp4": "mp4"
 } as const
 
+/** ファイルをStorageにアップロード */
+async function uploadToStorage(
+    storage_bucket: ReturnType<ReturnType<typeof getStorageInstance>["bucket"]>,
+    path: string,
+    data: Buffer,
+    content_type: string
+): Promise<string> {
+    const file_ref = storage_bucket.file(path)
+    await file_ref.save(data, { metadata: { contentType: content_type } })
+    await file_ref.makePublic()
+    return `https://storage.googleapis.com/${storage_bucket.name}/${path}`
+}
+
 export default defineEventHandler(async (event: H3Event) => {
     const formData = await readMultipartFormData(event)
 
     if (!formData) {
-        validationError(ERROR.VALIDATION.REQUIRED_FIELD)
+        return validationError(ERROR.VALIDATION.REQUIRED_FIELD)
     }
 
     const bucket_field = formData.find(f => f.name === "bucket")
     const file_field = formData.find(f => f.name === "file")
 
     if (!bucket_field || !file_field) {
-        validationError(ERROR.VALIDATION.REQUIRED_FIELD)
+        return validationError(ERROR.VALIDATION.REQUIRED_FIELD)
     }
 
     const bucket = bucket_field.data.toString()
@@ -47,49 +68,99 @@ export default defineEventHandler(async (event: H3Event) => {
 
     const file_ext = ALLOWED_TYPES[content_type as keyof typeof ALLOWED_TYPES]
     if (!file_ext) {
-        validationError(ERROR.VALIDATION.INVALID_FILE_TYPE)
+        return validationError(ERROR.VALIDATION.INVALID_FILE_TYPE)
     }
 
     console.log(LOG.DATA.FILE_UPLOADING, { bucket, filename })
 
     const db = getFirestoreInstance()
     const storage = getStorageInstance()
+    const storage_bucket = storage.bucket()
 
-    let storage_url: string
+    // Firestoreドキュメントを先に作成してIDを取得
+    const doc_ref = db.collection(bucket).doc("files").collection("items").doc()
+    const file_id = doc_ref.id
+
+    // 生データをアップロード
+    let raw_url: string
     try {
-        const storage_bucket = storage.bucket()
-        const storage_path = `${bucket}/raw/${filename}`
-        const file_ref = storage_bucket.file(storage_path)
-
-        await file_ref.save(file_data, {
-            metadata: { contentType: content_type }
-        })
-
-        await file_ref.makePublic()
-        storage_url = `https://storage.googleapis.com/${storage_bucket.name}/${storage_path}`
-
-        console.log(LOG.DATA.FILE_UPLOADED, { storage_url })
+        raw_url = await uploadToStorage(
+            storage_bucket,
+            `${bucket}/data/raw/${filename}`,
+            file_data,
+            content_type
+        )
+        console.log(LOG.DATA.FILE_UPLOADED, { raw_url })
     } catch (e) {
         console.error("Storage upload failed:", e)
-        serverError(ERROR.SERVICE.FIREBASE_ERROR)
+        return serverError(ERROR.SERVICE.FIREBASE_ERROR)
     }
 
     console.log(LOG.DATA.FILE_PROCESSING)
 
     let extracted_text = ""
     let title = filename
+    const data_urls: Record<string, string> = { raw: raw_url }
 
     try {
         if (file_ext === "pdf") {
-            const base64 = file_data.toString("base64")
-            extracted_text = await analyzePdf(base64)
+            // PDF: テキストと埋め込み画像を抽出
+            const { text, images } = await extractPdfContent(file_data)
+            extracted_text = text
+
+            // テキストをtxtファイルとしてアップロード（UTF-8 BOM付き）
+            const bom = Buffer.from([0xEF, 0xBB, 0xBF])
+            const text_buffer = Buffer.concat([bom, Buffer.from(text, "utf-8")])
+            const text_url = await uploadToStorage(
+                storage_bucket,
+                `${bucket}/data/${file_id}/pdf.txt`,
+                text_buffer,
+                "text/plain; charset=utf-8"
+            )
+            data_urls.text = text_url
+
+            // 埋め込み画像をPNGとしてアップロード
+            for (let i = 0; i < images.length; i++) {
+                const image_url = await uploadToStorage(
+                    storage_bucket,
+                    `${bucket}/data/${file_id}/pdf-${i + 1}.png`,
+                    images[i],
+                    "image/png"
+                )
+                data_urls[`image_${i + 1}`] = image_url
+            }
+
         } else if (file_ext === "jpg" || file_ext === "png") {
+            // 画像: Claude Visionで解析
             const base64 = bufferToBase64(file_data, content_type)
             const analysis = await analyzeImage(base64, content_type)
             extracted_text = analysis.searchable
             title = analysis.subject || filename
+
+            // 解析結果をJSONとしてアップロード
+            const json_url = await uploadToStorage(
+                storage_bucket,
+                `${bucket}/data/${file_id}/image.json`,
+                Buffer.from(JSON.stringify(analysis, null, 2), "utf-8"),
+                "application/json"
+            )
+            data_urls.analysis = json_url
+
         } else if (file_ext === "mp3" || file_ext === "m4a" || file_ext === "wav") {
+            // 音声: Whisperで文字起こし
             extracted_text = await transcribeAudio(file_data, filename)
+
+            // 文字起こし結果をtxtとしてアップロード（UTF-8 BOM付き）
+            const bom = Buffer.from([0xEF, 0xBB, 0xBF])
+            const text_buffer = Buffer.concat([bom, Buffer.from(extracted_text, "utf-8")])
+            const text_url = await uploadToStorage(
+                storage_bucket,
+                `${bucket}/data/${file_id}/audio.txt`,
+                text_buffer,
+                "text/plain; charset=utf-8"
+            )
+            data_urls.text = text_url
+
         } else if (file_ext === "mp4") {
             extracted_text = `動画ファイル: ${filename}`
         }
@@ -100,37 +171,50 @@ export default defineEventHandler(async (event: H3Event) => {
         extracted_text = `ファイル: ${filename}`
     }
 
-    const doc_ref = db.collection(bucket).doc("files").collection("items").doc()
-    const file_id = doc_ref.id
-
+    // Firestoreにメタデータを保存
     await doc_ref.set({
         id: file_id,
         filename,
-        url: storage_url,
         filetype: file_ext,
-        content: extracted_text.slice(0, 10000),
+        urls: data_urls,
+        preview: extracted_text.slice(0, 1000),
         created: FieldValue.serverTimestamp()
     })
 
+    // テキストをチャンク分割してEmbeddingを生成、Pineconeに保存
     try {
-        const embedding = await generateEmbedding(extracted_text.slice(0, 8000))
+        const chunks = chunkText(extracted_text, { chunk_size: 1000, overlap: 200 })
+        const total_chunks = chunks.length
 
-        const metadata: VectorMetadata = {
-            bucket,
-            sourcetype: SourceType.FILE,
-            source: file_id,
-            title,
-            text: extracted_text.slice(0, 1000),
-            created: new Date().toISOString()
-        }
+        console.log(`Chunking text: ${extracted_text.length} chars -> ${total_chunks} chunks`)
 
-        await upsertVectors(bucket, [
-            {
-                id: `file_${file_id}`,
+        const vectors: VectorUpsert[] = []
+
+        for (const chunk of chunks) {
+            const embedding = await generateEmbedding(chunk.text)
+
+            const metadata: VectorMetadata = {
+                bucket,
+                sourcetype: SourceType.FILE,
+                source: file_id,
+                title,
+                text: chunk.text,
+                chunk_index: chunk.index,
+                total_chunks,
+                created: new Date().toISOString()
+            }
+
+            vectors.push({
+                id: `file_${file_id}_chunk_${chunk.index}`,
                 values: embedding,
                 metadata
-            }
-        ])
+            })
+        }
+
+        if (vectors.length > 0) {
+            await upsertVectors(bucket, vectors)
+            console.log(`Upserted ${vectors.length} vectors to Pinecone`)
+        }
     } catch (e) {
         console.error("Embedding/Pinecone failed:", e)
     }
@@ -138,7 +222,7 @@ export default defineEventHandler(async (event: H3Event) => {
     return success(event, {
         id: file_id,
         filename,
-        url: storage_url,
-        content: extracted_text.slice(0, 500)
+        urls: data_urls,
+        preview: extracted_text.slice(0, 500)
     }, 201)
 })

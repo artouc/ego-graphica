@@ -23,7 +23,7 @@
 
 2. LLM & AI
 - メインLLM: Claude 4.5 Opus（`claude-opus-4-5`）
-- PDF解析: Claude Visual PDFs（`claude-opus-4-5`）
+- PDF解析: pdfjs-dist（テキスト抽出＋埋め込み画像抽出）
 - 画像解析: Claude Vision（`claude-opus-4-5`）
 - 音声文字起こし: OpenAI（`gpt-4o-transcribe`）
 - Embedding: OpenAI（`text-embedding-3-large`、3072次元）
@@ -45,12 +45,17 @@
 - `/{アーティストバケット名}/profile`: アーティスト基本情報
 - `/{アーティストバケット名}/persona`: ペルソナ設定
 - `/{アーティストバケット名}/works/{workId}`: 作品データ
+- `/{アーティストバケット名}/files/items/{fileId}`: アップロードファイルメタデータ
 - `/{アーティストバケット名}/from-url/{urlId}`: スクレイピングデータ
 - `/{アーティストバケット名}/session/{sessionId}/messages/{messageId}`: エージェント会話履歴
 - `/{アーティストバケット名}/hearing/{hearingId}/messages/{messageId}`: ヒアリング履歴
 
 2. Firebase Storage
-- `/{アーティストバケット名}/raw/`: 元ファイル（フラット構造、元ファイル名維持）
+- `/{アーティストバケット名}/data/raw/`: 生データ（元ファイル名維持）
+- `/{アーティストバケット名}/data/{fileId}/`: 処理済みデータ
+  - PDF: `pdf.txt`（全文テキスト）, `pdf-1.png`, `pdf-2.png`...（埋め込み画像）
+  - 音声: `audio.txt`（文字起こし）
+  - 画像: `image.json`（Claude Vision解析結果）
 
 3. Pinecone
 - Index名: `egographica`
@@ -67,11 +72,12 @@
 2. 情報提供画面
 - パス: `/dashboard/upload`
 - `.pdf`、`.mp3`、`.m4a`、`.wav`、`.jpg`、`.png`をアップロードできるフォームを用意
-- PDFデータの場合Claude Visual PDFsを用いて解析
+- PDFデータの場合pdfjs-distでテキスト抽出＋埋め込み画像抽出
 - 画像データの場合Claude Visionを用いて解析
-- 音声データの場合`gpt-4o-transcribe`を用いて解析
+- 音声データの場合`gpt-4o-transcribe`を用いて文字起こし
 - 解析したデータはPineconeの`${アーティストバケット名}`Namespaceに格納
-- 元データは元のファイル名を維持したままFirebase Storageの`/${アーティストバケット名}/raw/`内に階層構造を作らず格納
+- 生データは`/${アーティストバケット名}/data/raw/`に保存
+- 処理済みデータは`/${アーティストバケット名}/data/{fileId}/`に保存（txt, png, json等）
 
 3. URL提供画面
 - パス: `/dashboard/url`

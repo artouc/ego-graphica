@@ -248,6 +248,40 @@ types:
         description: 検索用テキスト（全体を統合した自然言語説明）
 
   # ----------------------------------------------------------------------------
+  # File（アップロードファイル）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/file.ts
+  # Firestore: /{bucket}/files/items/{fileId}
+
+  File:
+    description: アップロードファイルメタデータ
+    fields:
+      id:
+        type: string
+        required: true
+        description: ファイルID（Firestore自動生成）
+      filename:
+        type: string
+        required: true
+        description: 元ファイル名
+      filetype:
+        type: string
+        required: true
+        description: ファイル形式（pdf, jpg, png, mp3, m4a, wav, mp4）
+      urls:
+        type: Record<string, string>
+        required: true
+        description: Storage URL群（raw, text, image_1, image_2...）
+      preview:
+        type: string
+        required: true
+        description: テキストプレビュー（1000文字まで）
+      created:
+        type: Timestamp
+        required: true
+        description: 作成日時
+
+  # ----------------------------------------------------------------------------
   # FromUrl（スクレイピングデータ）
   # ----------------------------------------------------------------------------
   # ファイル: packages/shared/src/types/from_url.ts
@@ -425,6 +459,13 @@ pinecone:
   index: egographica
   dimensions: 3072
   model: text-embedding-3-large
+  chunking:
+    chunk_size: 1000
+    overlap: 200
+  vector_id_format:
+    - work_{workId}_chunk_{n}
+    - url_{urlId}_chunk_{n}
+    - file_{fileId}_chunk_{n}
 
   VectorMetadata:
     description: Pineconeベクトルメタデータ
@@ -449,6 +490,14 @@ pinecone:
         type: string
         required: true
         description: 検索用テキスト（max 1000 chars）
+      chunk_index:
+        type: number
+        required: false
+        description: チャンクインデックス（0始まり）
+      total_chunks:
+        type: number
+        required: false
+        description: 総チャンク数
       colors:
         type: string[]
         required: false
@@ -474,8 +523,8 @@ storage:
   structure:
     description: Firebase Storage構造
     paths:
-      - path: /{bucket}/raw/
-        description: 元ファイル保存（フラット構造、元ファイル名維持）
+      - path: /{bucket}/data/raw/
+        description: 生データ（元ファイル名維持）
         filetypes:
           - pdf
           - mp3
@@ -484,6 +533,13 @@ storage:
           - jpg
           - png
           - mp4
+      - path: /{bucket}/data/{fileId}/
+        description: 処理済みデータ
+        files:
+          - pdf.txt: 全文テキスト（PDF）
+          - pdf-{n}.png: 埋め込み画像（PDF）
+          - audio.txt: 文字起こし（音声）
+          - image.json: Claude Vision解析結果（画像）
 
 # ==============================================================================
 # Firestore Collection Structure
@@ -504,6 +560,10 @@ firestore:
       - path: /{bucket}/works/{workId}
         type: Work
         description: 作品データ
+
+      - path: /{bucket}/files/items/{fileId}
+        type: File
+        description: アップロードファイルメタデータ
 
       - path: /{bucket}/from-url/{urlId}
         type: FromUrl

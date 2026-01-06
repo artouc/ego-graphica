@@ -16,9 +16,12 @@
         "@egographica/shared": "*",
         "@pinecone-database/pinecone": "^4.1.0",
         "ai": "^4.1.0",
+        "canvas": "^3.2.0",
+        "dotenv": "^17.2.3",
         "firebase-admin": "^13.0.0",
         "h3": "^1.15.0",
         "nitropack": "^2.10.0",
+        "pdfjs-dist": "^5.4.530",
         "zod": "^3.24.0"
     },
     "devDependencies": {

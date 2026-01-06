@@ -16,6 +16,10 @@ export interface VectorMetadata {
     title: string
     /** 検索用テキスト（max 1000 chars） */
     text: string
+    /** チャンクインデックス（0始まり） */
+    chunk_index?: number
+    /** 総チャンク数 */
+    total_chunks?: number
     /** 主要な色（ImageAnalysisから） */
     colors?: string[]
     /** スタイル（ImageAnalysisから） */

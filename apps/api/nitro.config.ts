@@ -1,21 +1,13 @@
 import { defineNitroConfig } from "nitropack/config"
+import { config } from "dotenv"
+
+config()
 
 export default defineNitroConfig({
     compatibilityDate: "2025-01-06",
     srcDir: ".",
     devServer: {
         port: 3011
-    },
-    routeRules: {
-        "/api/**": {
-            cors: true,
-            headers: {
-                "Access-Control-Allow-Origin": process.env.WEB_URL,
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                "Access-Control-Allow-Credentials": "true"
-            }
-        }
     },
     runtimeConfig: {
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
@@ -26,6 +18,7 @@ export default defineNitroConfig({
         firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,
         firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-        webUrl: process.env.WEB_URL
+        webUrl: process.env.WEB_URL,
+        masterApiKey: process.env.MASTER_API_KEY
     }
 })
