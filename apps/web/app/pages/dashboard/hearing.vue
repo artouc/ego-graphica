@@ -21,6 +21,13 @@ async function scrollToBottom() {
     }
 }
 
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        handleSend()
+    }
+}
+
 async function handleSend() {
     if (!input.value.trim() || !auth.bucket.value) return
 
@@ -113,8 +120,8 @@ onMounted(() => {
                     <div class="flex gap-2">
                         <UiInput
                             v-model="input"
-                            placeholder="メッセージを入力..."
-                            @keydown.enter="handleSend"
+                            placeholder="メッセージを入力... (Cmd/Ctrl + Enter で送信)"
+                            @keydown="handleKeydown"
                             :disabled="is_loading || !auth.is_configured.value"
                         />
                         <UiButton
