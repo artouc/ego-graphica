@@ -1,0 +1,28 @@
+{
+    "name": "@egographica/api",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "nitro dev --port 3001",
+        "build": "nitro build",
+        "preview": "nitro preview",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint . --ext .ts"
+    },
+    "dependencies": {
+        "@ai-sdk/anthropic": "^1.2.0",
+        "@ai-sdk/openai": "^1.2.0",
+        "@egographica/shared": "*",
+        "@pinecone-database/pinecone": "^4.1.0",
+        "ai": "^4.1.0",
+        "firebase-admin": "^13.0.0",
+        "h3": "^1.15.0",
+        "nitropack": "^2.10.0",
+        "zod": "^3.24.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "typescript": "^5.6.0"
+    }
+}

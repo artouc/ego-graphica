@@ -34,3 +34,4 @@
 4. Nuxt.js 4の挙動について不明瞭な点が発生したら、`user/repomix-output/nuxt-v4.xml`を参照する
 4. shadcn-vueを用いる際、`user/repomix-output/shadcn-vue-v2.xml`を参照して仕様を把握した上でレスポンシブ対応のUIを作成する
 5. バックグラウンドで`npm run dev`を実行せず、必ずユーザーに実行を促す
+6. ESLint, Prittierを導入して適宜フォーマットコマンドを実行する
