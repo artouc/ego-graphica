@@ -1,209 +1,343 @@
-# BLUEPRINT 乖離分析
+# ego Graphica - ドキュメント間の乖離分析
 
-> `user/BLUEPRINT.md`（要件定義）と `llm/BLUEPRINT.md`（技術設計）の差分を整理
-
----
-
-## 1. 命名規則の乖離
-
-| 項目 | user/BLUEPRINT.md | llm/BLUEPRINT.md |
-|------|-------------------|------------------|
-| アーティスト識別子 | `${アーティストバケット名}` | `artistId` |
-| エージェント呼称 | 「ego Graphicaエージェント」 | 「AI営業エージェント」「AIアシスタント」 |
-
-**対応必要**: 命名を統一する
+> `user/BLUEPRINT.md`、`llm/REFACTOR.md`、`llm/BLUEPRINT.md` の3ファイルを比較
 
 ---
 
-## 2. データ構造の乖離
+## 1. エージェントの役割定義
 
-### Firestoreコレクション
+| ドキュメント | 定義 |
+|-------------|------|
+| user | 「顧客と会話するエージェント」 |
+| REFACTOR | 「顧客と会話するエージェント」 |
+| BLUEPRINT | 「営業を行う自律型AIエージェント」「顧客対応を自動化」 |
 
-| user/BLUEPRINT.md | llm/BLUEPRINT.md | 状態 |
-|-------------------|------------------|------|
-| `${bucket}/` (ルートコレクション) | `artists/{artistId}` | **構造が異なる** |
-| `${bucket}/works` | `works/{workId}` | **階層が異なる** |
-| `${bucket}/from-url` | なし | **未実装** |
-| `${bucket}/session` | `conversations/{conversationId}` | 名称異なる |
-| `${bucket}/hearing` | なし | **未実装** |
-| なし | `articles/{articleId}` | 追加機能 |
-| なし | `podcasts/{podcastId}` | 追加機能 |
-| なし | `quotes/{quoteId}` | 追加機能 |
-
-### Firebase Storage
-
-| user/BLUEPRINT.md | llm/BLUEPRINT.md | 状態 |
-|-------------------|------------------|------|
-| `/${bucket}/raw/` (フラット構造) | `artists/{artistId}/works/` | **パス構造が異なる** |
-
-### Pinecone
-
-| user/BLUEPRINT.md | llm/BLUEPRINT.md | 状態 |
-|-------------------|------------------|------|
-| Namespace: `${bucket}` | Namespace: `{artistId}` | 名称のみ異なる（実質同じ） |
+**乖離**: BLUEPRINTは「営業」機能を強調（見積もり生成、スケジュール確認等）
 
 ---
 
-## 3. 機能の乖離
+## 2. Firestoreコレクション構造
 
-### 未実装機能（user/BLUEPRINT.mdにあり、llm/BLUEPRINT.mdにない）
-
-| 機能 | 説明 | 優先度 |
-|------|------|--------|
-| **URL提供画面** | URLスクレイピング → `from-url`コレクション | 高 |
-| **ヒアリング画面** | アーティストフィードバック収集 → `hearing`コレクション | 高 |
-| **PDF解析** | Claude Visual PDFsによるPDF内容抽出 | 中 |
-| **販売状況管理** | 売却済/売約済/販売中/非売品 | 中 |
-| **クライアント情報** | クライアントワーク/自主制作、クライアント名 | 中 |
-| **制作ストーリー** | 作品ごとの制作背景 | 低 |
-
-### 追加機能（llm/BLUEPRINT.mdにあり、user/BLUEPRINT.mdにない）
-
-| 機能 | 説明 | 必要性 |
-|------|------|--------|
-| **ペルソナ設定** | tone, personality, artisticPhilosophy等 | 要確認 |
-| **Tool Calling** | showPortfolio, generateQuote, checkAvailability等 | 要確認 |
-| **見積もり機能** | 価格表、概算見積もり生成 | 要確認 |
-| **記事(articles)** | ブログ・記事管理 | 要確認 |
-| **ポッドキャスト分離** | 音声を独立コレクションで管理 | 要確認 |
-| **マルチモーダルRAG** | 画像からの視覚的類似検索 | 要確認 |
-
----
-
-## 4. 作品データモデルの乖離
-
-### user/BLUEPRINT.md（要件）
-
+### user / REFACTOR（一致）
 ```
-- 作品データ（.png, .jpg, .wav, .mp4）
-- タイトル
-- 作成年月日
-- クライアントワーク or 自主制作
-- クライアント名
-- 販売状況（売却済、売約済、販売中、非売品）
-- 説明（自由記述）
-- 制作ストーリー（自由記述）
+/{アーティストバケット名}/
+├── profile
+├── persona
+├── works/{workId}
+├── from-url/{urlId}
+├── session/{sessionId}/messages/{messageId}
+└── hearing/{hearingId}/messages/{messageId}
 ```
 
-### llm/BLUEPRINT.md（設計）
-
+### BLUEPRINT（異なる）
 ```
-- images (WorkImage[])
-- title, titleEn
-- year
-- category (WorkCategory)
-- tags, styles
-- description, descriptionEn
-- medium（油彩、デジタル等）
-- dimensions (width, height, unit)
-- isForSale, price
-- isCommissionable（類似作品依頼可否）
-- isPublic, isFeatured
+artists/{artistId}
+works/{workId}
+articles/{articleId}
+podcasts/{podcastId}
+conversations/{conversationId}/messages/{messageId}
+quotes/{quoteId}
 ```
 
-### 差分
-
-| フィールド | user | llm | 対応 |
-|-----------|------|-----|------|
-| 作成年月日 | あり | `year`のみ | **月日が欠落** |
-| クライアントワーク/自主制作 | あり | なし | **未実装** |
-| クライアント名 | あり | なし | **未実装** |
-| 販売状況（4種） | あり | `isForSale`（2種） | **粒度不足** |
-| 制作ストーリー | あり | なし | **未実装** |
-| .wav, .mp4対応 | あり | 画像のみ | **未実装** |
-| medium | なし | あり | 追加 |
-| dimensions | なし | あり | 追加 |
-| isCommissionable | なし | あり | 追加 |
-| 英語対応 | なし | あり | 追加 |
+**乖離**:
+- コレクション名が異なる（`session` vs `conversations`、`from-url` vs `articles`）
+- BLUEPRINTはバケット名によるネスト構造を採用していない
+- BLUEPRINTには `quotes` コレクションが追加
+- BLUEPRINTには `podcasts` コレクションが追加（user/REFACTORでは音声はファイルとして処理）
 
 ---
 
-## 5. ファイル対応形式の乖離
+## 3. 音声文字起こしモデル
 
-### user/BLUEPRINT.md
+| ドキュメント | モデル |
+|-------------|--------|
+| user | `gpt-4o-transcribe` |
+| REFACTOR | `gpt-4o-transcribe` |
+| BLUEPRINT | `whisper-1` |
 
-| 形式 | 処理方法 |
+**乖離**: BLUEPRINTは旧モデル（whisper-1）を記載
+
+---
+
+## 4. Embedding次元数
+
+| ドキュメント | 次元数 | モデル |
+|-------------|--------|--------|
+| user | 記載なし | 記載なし |
+| REFACTOR | 3072 | `text-embedding-3-large` |
+| BLUEPRINT | 1536 / 3072（混在） | `text-embedding-3-small` / `text-embedding-3-large`（混在） |
+
+**乖離**: BLUEPRINTは一部で1536次元（text-embedding-3-small）の記載あり
+
+---
+
+## 5. Pinecone Index名
+
+| ドキュメント | Index名 |
+|-------------|---------|
+| REFACTOR | `egographica` |
+| BLUEPRINT | `ego-graphica`（ハイフン入り） |
+
+**乖離**: 命名規則の不一致
+
+---
+
+## 6. Tool Calling定義
+
+### user
+- 「Function Calling等」のみ記載
+
+### REFACTOR
+- `showWorks`: 作品をグリッド表示
+- `searchWorks`: セマンティック検索
+- `visualSearch`: 色・スタイル・雰囲気で検索
+
+### BLUEPRINT
+- `showPortfolio`: ポートフォリオ表示
+- `checkAvailability`: スケジュール確認
+- `generateQuote`: 見積もり生成
+- `showContactForm`: 問い合わせフォーム表示
+- `searchWorks`: セマンティック検索
+
+**乖離**:
+- 命名が異なる（`showWorks` vs `showPortfolio`）
+- BLUEPRINTには営業系ツール（見積もり、スケジュール、問い合わせ）が追加
+- REFACTORにはBLUEPRINTにない `visualSearch` がある
+
+---
+
+## 7. API設計
+
+### user
+- 記載なし
+
+### REFACTOR
+| エンドポイント | 用途 |
+|---------------|------|
+| `/auth/register` | アーティスト登録 |
+| `/auth/login` | ログイン |
+| `/auth/verify` | トークン検証 |
+| `/persona` | ペルソナ取得/更新 |
+| `/chat` | エージェント会話 |
+| `/hearing` | ヒアリング会話 |
+
+### BLUEPRINT
+| エンドポイント | 用途 |
+|---------------|------|
+| `/auth/login` | ログイン |
+| `/auth/register` | 登録 |
+| `/auth/verify` | トークン検証 |
+| `/auth/refresh` | トークン更新 |
+| `/artist/persona` | ペルソナ更新 |
+| `/artist/[id]` | アーティスト取得 |
+
+**乖離**:
+- BLUEPRINTには `/auth/refresh` が追加
+- ペルソナのパスが異なる（`/persona` vs `/artist/persona`）
+- エンドポイント構造が異なる
+
+---
+
+## 8. 画面構成
+
+### user / REFACTOR（一致）
+1. アーティスト登録画面 `/register`
+2. 情報提供画面（ファイル） `/dashboard/upload`
+3. URL提供画面 `/dashboard/url`
+4. データベース提供画面（作品管理） `/dashboard/works`
+5. エージェント会話画面 `/agent/{bucket}`
+6. ヒアリング画面 `/dashboard/hearing`
+7. ペルソナ設定画面 `/dashboard/persona`（REFACTORで追加）
+
+### BLUEPRINT
+- `/artist/[id]/chat.vue`
+- `/dashboard/works.vue`
+- `/dashboard/persona.vue`
+- 記事・ポッドキャスト管理画面の記載あり
+
+**乖離**:
+- パス構造が異なる（`/agent/{bucket}` vs `/artist/[id]/chat`）
+- BLUEPRINTには記事・ポッドキャスト管理が独立
+
+---
+
+## 9. 追加機能の範囲
+
+### user
+- RAG, CAG, Function Calling（言及のみ）
+
+### REFACTOR
+- ペルソナ設定
+- CAG（Context Augmented Generation）
+- Tool Calling（showWorks, searchWorks, visualSearch）
+- マルチモーダルRAG
+
+### BLUEPRINT
+上記に加えて:
+- 見積もり生成・管理
+- スケジュール/空き状況確認
+- 問い合わせフォーム
+- 価格表（PriceTable）
+- 繁忙期管理（BusyPeriod）
+- 会話フェーズ判定
+- ハイブリッド検索
+- クエリ拡張
+
+**乖離**: BLUEPRINTには営業・ビジネス機能が多数含まれる（user要件外）
+
+---
+
+## 10. データモデル
+
+### user / REFACTOR（一致）
+- Profile
+- Persona
+- Work
+- FromUrl
+- Session / SessionMessage
+- Hearing / HearingMessage
+- ImageAnalysis（REFACTOR追加）
+
+### BLUEPRINT
+上記に加えて:
+- Artist（Profile, Persona, Settingsを統合）
+- AgentSettings
+- PriceTable
+- BusyPeriod
+- Article
+- Podcast
+- Conversation / Message
+- Quote / QuoteItem
+- WorkCategory
+- WorkImage
+
+**乖離**: BLUEPRINTは営業機能に必要な型が多数追加
+
+---
+
+## 11. UIライブラリ
+
+| ドキュメント | ライブラリ |
+|-------------|-----------|
+| user | 記載なし |
+| REFACTOR | shadcn-vue |
+| BLUEPRINT | CSS（シンプルに開始） |
+
+**乖離**: UIライブラリの選定が異なる
+
+---
+
+## 12. 認証フロー
+
+### user / REFACTOR
+- 詳細記載なし
+
+### BLUEPRINT
+1. クライアント → API（ログインリクエスト）
+2. API → Firebase Admin（検証/作成）
+3. カスタムトークン発行
+4. 以降Bearerトークン認証
+
+**乖離**: BLUEPRINTのみ詳細な認証フローが定義
+
+---
+
+## 13. Pinecone Vector ID形式
+
+### REFACTOR
+```
+work_{workId}
+url_{urlId}
+file_{fileId}
+```
+
+### BLUEPRINT
+```
+work_{workId}
+article_{articleId}
+podcast_{podcastId}
+```
+
+**乖離**: `url_` vs `article_`、`file_` vs `podcast_`
+
+---
+
+## 14. ディレクトリ構成
+
+### REFACTOR
+```
+apps/api/utils/
+├── ai/
+├── db/
+├── cag/        # CAG専用
+├── rag/
+├── scraper/
+└── tools/
+```
+
+### BLUEPRINT
+```
+apps/api/utils/
+├── ai/
+├── db/
+├── rag/
+└── tools/
+```
+（`server/utils/` として記載される箇所も混在）
+
+**乖離**:
+- REFACTORには `cag/` ディレクトリがある
+- REFACTORには `scraper/` ディレクトリがある
+- BLUEPRINTはパス記載が `server/utils/` と `apps/api/utils/` で混在
+
+---
+
+## 15. 環境変数
+
+### REFACTOR / BLUEPRINT（一致）
+- ANTHROPIC_API_KEY
+- OPENAI_API_KEY
+- PINECONE_API_KEY
+- PINECONE_INDEX
+- FIREBASE_PROJECT_ID
+- FIREBASE_CLIENT_EMAIL
+- FIREBASE_PRIVATE_KEY
+- NUXT_PUBLIC_API_URL
+- WEB_URL
+
+### BLUEPRINTのみ
+- NUXT_PUBLIC_FIREBASE_API_KEY
+- NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+- NUXT_PUBLIC_FIREBASE_PROJECT_ID
+- NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+
+**乖離**: BLUEPRINTにはクライアント側Firebase設定が含まれる（firebase-adminのみ使用のREFACTORと矛盾）
+
+---
+
+## まとめ
+
+### 優先度: 高（実装に直接影響）
+
+| 項目 | 推奨対応 |
 |------|----------|
-| `.pdf` | Claude Visual PDFs |
-| `.mp3`, `.m4a`, `.wav` | gpt-4o-transcribe |
-| `.jpg`, `.png` | Claude Vision |
+| Firestoreコレクション構造 | user/REFACTOR を採用 |
+| 音声文字起こしモデル | `gpt-4o-transcribe` を採用 |
+| Embedding次元数 | 3072次元に統一 |
+| Pinecone Index名 | `egographica` に統一 |
+| Tool Calling定義 | REFACTOR を基準、必要に応じて拡張 |
 
-### llm/BLUEPRINT.md
+### 優先度: 中（設計判断が必要）
 
-| 形式 | 処理方法 |
+| 項目 | 検討事項 |
 |------|----------|
-| `.pdf` | **未対応** |
-| `.mp3`, `.m4a`, `.wav` | whisper-1 |
-| `.jpg`, `.png`, `.gif`, `.webp` | Claude Vision |
-| `.mp4` | **未対応** |
+| 営業機能（見積もり等） | 採用するかユーザー確認が必要 |
+| 記事・ポッドキャスト管理 | 採用するかユーザー確認が必要 |
+| 認証フロー詳細 | BLUEPRINTの詳細設計を参考に |
 
-### 差分
+### 優先度: 低（後から変更可能）
 
-| 形式 | 状態 |
+| 項目 | 備考 |
 |------|------|
-| PDF | **未実装** |
-| MP4（動画） | **未実装** |
-| 音声モデル | `gpt-4o-transcribe` → `whisper-1` に変更 |
-
----
-
-## 6. 画面構成の乖離
-
-### user/BLUEPRINT.md（6画面）
-
-1. アーティスト登録画面
-2. 情報提供画面（ファイルアップロード）
-3. URL提供画面
-4. データベース提供画面（作品管理）
-5. エージェント会話画面
-6. ヒアリング画面
-
-### llm/BLUEPRINT.md（想定画面）
-
-1. ダッシュボード（index.vue）
-2. 作品管理（dashboard/works.vue）
-3. ペルソナ設定（dashboard/persona.vue）
-4. アーティストページ（artist/[id]/index.vue）
-5. チャット画面（artist/[id]/chat.vue）
-
-### 差分
-
-| 画面 | 状態 |
-|------|------|
-| アーティスト登録画面 | **未設計** |
-| 情報提供画面 | 作品アップロードのみ（PDF/URL未対応） |
-| URL提供画面 | **未設計** |
-| ヒアリング画面 | **未設計** |
-| ペルソナ設定画面 | **追加**（要件になし） |
-
----
-
-## 7. 対応優先度
-
-### 高優先度（要件との乖離が大きい）
-
-1. **URL提供画面の実装** - スクレイピング機能追加
-2. **ヒアリング画面の実装** - フィードバック収集機能追加
-3. **作品データモデル修正** - クライアント情報、販売状況、制作ストーリー追加
-4. **PDF解析機能** - Claude Visual PDFs対応
-
-### 中優先度
-
-5. **アーティスト登録画面** - バケット自動生成フロー
-6. **販売状況の4分類化** - 売却済/売約済/販売中/非売品
-7. **動画対応** - .mp4ファイルの処理
-
-### 低優先度（追加機能の要否確認）
-
-8. ペルソナ設定機能の要否
-9. Tool Calling（見積もり、スケジュール）の要否
-10. 記事・ポッドキャスト分離の要否
-
----
-
-## 8. 推奨アクション
-
-1. **要件確認**: user/BLUEPRINT.mdの機能が全て必要か確認
-2. **データモデル統一**: コレクション構造を要件に合わせて再設計
-3. **優先度決定**: 未実装機能の実装順序を決定
-4. **追加機能判断**: llm/BLUEPRINT.mdの追加機能を採用するか判断
+| UIライブラリ | shadcn-vue で進める |
+| ディレクトリ構成 | REFACTORに従う |
