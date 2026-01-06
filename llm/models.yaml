@@ -1,0 +1,542 @@
+# ego Graphica - データモデル定義
+#
+# このファイルはllm/REFACTOR.mdから抽出した型定義です。
+# 実装変更時は本ファイルも必ず更新してください。
+
+# ==============================================================================
+# Enums（列挙型）
+# ==============================================================================
+
+enums:
+  PersonaTone:
+    description: ペルソナの話し方トーン
+    values:
+      - formal      # 丁寧・フォーマル
+      - friendly    # フレンドリー
+      - artistic    # 芸術的・詩的
+      - professional # プロフェッショナル
+      - playful     # 遊び心のある
+
+  FileType:
+    description: 作品ファイル形式
+    values:
+      - png
+      - jpg
+      - wav
+      - mp4
+
+  WorkType:
+    description: 作品の種類
+    values:
+      - client   # クライアントワーク
+      - personal # 自主制作
+
+  SalesStatus:
+    description: 販売状況
+    values:
+      - sold        # 売却済
+      - reserved    # 売約済
+      - available   # 販売中
+      - unavailable # 非売品
+
+  MessageRole:
+    description: メッセージの役割
+    values:
+      - user
+      - assistant
+      - system
+
+  HearingRole:
+    description: ヒアリングメッセージの役割
+    values:
+      - user
+      - assistant
+
+# ==============================================================================
+# Types（型定義）
+# ==============================================================================
+
+types:
+  # ----------------------------------------------------------------------------
+  # Profile（アーティスト基本情報）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/profile.ts
+  # Firestore: /{bucket}/profile
+
+  Profile:
+    description: アーティスト基本情報
+    fields:
+      name:
+        type: string
+        required: true
+        description: アーティスト名
+      bucket:
+        type: string
+        required: true
+        description: バケット名（一意識別子）
+      created:
+        type: Timestamp
+        required: true
+        description: 作成日時
+      updated:
+        type: Timestamp
+        required: true
+        description: 更新日時
+
+  # ----------------------------------------------------------------------------
+  # Persona（ペルソナ設定）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/persona.ts
+  # Firestore: /{bucket}/persona
+
+  Persona:
+    description: ペルソナ設定（CAG用）
+    fields:
+      character:
+        type: string
+        required: false
+        description: エージェント名
+      motif:
+        type: string
+        required: true
+        description: モチーフ（カエル、猫など）
+      tone:
+        type: PersonaTone
+        required: true
+        description: 話し方のトーン
+      personality:
+        type: string[]
+        required: true
+        description: 性格特性
+      philosophy:
+        type: string
+        required: true
+        description: 創作哲学
+      influences:
+        type: string[]
+        required: true
+        description: 影響を受けた作家・文化
+      keywords:
+        type: string[]
+        required: true
+        description: よく使う言葉
+      greeting:
+        type: string
+        required: true
+        description: 挨拶の仕方
+      samples:
+        type: SampleResponse[]
+        required: true
+        description: 理想的な応答例
+      avoidances:
+        type: string[]
+        required: true
+        description: 避けるべきトピック
+      backstory:
+        type: string
+        required: true
+        description: バックストーリー
+
+  SampleResponse:
+    description: 理想的な応答例
+    fields:
+      situation:
+        type: string
+        required: true
+        description: 状況説明
+      message:
+        type: string
+        required: true
+        description: 顧客の発言例
+      response:
+        type: string
+        required: true
+        description: 理想的な応答
+
+  # ----------------------------------------------------------------------------
+  # Work（作品データ）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/work.ts
+  # Firestore: /{bucket}/works/{workId}
+
+  Work:
+    description: 作品データ
+    fields:
+      id:
+        type: string
+        required: true
+        description: 作品ID（Firestore自動生成）
+      url:
+        type: string
+        required: true
+        description: Firebase Storage URL
+      filetype:
+        type: FileType
+        required: true
+        description: ファイル形式
+      title:
+        type: string
+        required: true
+        description: タイトル
+      date:
+        type: Timestamp
+        required: true
+        description: 作成年月日
+      worktype:
+        type: WorkType
+        required: true
+        description: クライアントワーク or 自主制作
+      client:
+        type: string
+        required: false
+        description: クライアント名（worktype=client時のみ）
+      status:
+        type: SalesStatus
+        required: true
+        description: 販売状況
+      description:
+        type: string
+        required: false
+        description: 説明（自由記述）
+      story:
+        type: string
+        required: false
+        description: 制作ストーリー（自由記述）
+      analysis:
+        type: ImageAnalysis
+        required: false
+        description: Claude Vision解析結果（マルチモーダルRAG用）
+      created:
+        type: Timestamp
+        required: true
+        description: 登録日時
+      updated:
+        type: Timestamp
+        required: true
+        description: 更新日時
+
+  ImageAnalysis:
+    description: Claude Vision画像解析結果（マルチモーダルRAG用）
+    fields:
+      colors:
+        type: string[]
+        required: true
+        description: 主要な色（例: ["深い青", "白", "金"]）
+      colormood:
+        type: string
+        required: true
+        description: 色の印象（例: "落ち着いた", "鮮やか"）
+      composition:
+        type: string
+        required: true
+        description: 構図（例: "中央配置", "三分割"）
+      style:
+        type: string
+        required: true
+        description: スタイル（例: "写実的", "抽象的"）
+      technique:
+        type: string
+        required: true
+        description: 技法（例: "油彩風", "水彩風"）
+      subject:
+        type: string
+        required: true
+        description: 主題（例: "海辺の風景"）
+      elements:
+        type: string[]
+        required: true
+        description: 要素（例: ["波", "夕日", "岩"]）
+      mood:
+        type: string
+        required: true
+        description: 雰囲気（例: "静謐", "躍動的"）
+      narrative:
+        type: string
+        required: true
+        description: 物語性
+      tags:
+        type: string[]
+        required: true
+        description: 推奨タグ
+      searchable:
+        type: string
+        required: true
+        description: 検索用テキスト（全体を統合した自然言語説明）
+
+  # ----------------------------------------------------------------------------
+  # FromUrl（スクレイピングデータ）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/from_url.ts
+  # Firestore: /{bucket}/from-url/{urlId}
+
+  FromUrl:
+    description: URLスクレイピングデータ
+    fields:
+      id:
+        type: string
+        required: true
+        description: URL ID（Firestore自動生成）
+      url:
+        type: string
+        required: true
+        description: 元URL
+      title:
+        type: string
+        required: false
+        description: ページタイトル
+      content:
+        type: string
+        required: true
+        description: 本文
+      scraped:
+        type: Timestamp
+        required: true
+        description: スクレイピング日時
+      created:
+        type: Timestamp
+        required: true
+        description: 登録日時
+
+  # ----------------------------------------------------------------------------
+  # Session（エージェント会話）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/session.ts
+  # Firestore: /{bucket}/session/{sessionId}
+
+  Session:
+    description: エージェント会話セッション
+    fields:
+      id:
+        type: string
+        required: true
+        description: セッションID（Firestore自動生成）
+      started:
+        type: Timestamp
+        required: true
+        description: 開始日時
+      updated:
+        type: Timestamp
+        required: true
+        description: 更新日時
+      messages:
+        type: number
+        required: true
+        description: メッセージ数
+      summary:
+        type: string
+        required: false
+        description: AIによる要約
+
+  # Firestore: /{bucket}/session/{sessionId}/messages/{messageId}
+
+  SessionMessage:
+    description: エージェント会話メッセージ
+    fields:
+      id:
+        type: string
+        required: true
+        description: メッセージID（Firestore自動生成）
+      session:
+        type: string
+        required: true
+        description: セッションID
+      role:
+        type: MessageRole
+        required: true
+        description: メッセージの役割
+      content:
+        type: string
+        required: true
+        description: メッセージ内容
+      tools:
+        type: ToolCallResult[]
+        required: false
+        description: Tool Calling結果
+      created:
+        type: Timestamp
+        required: true
+        description: 作成日時
+
+  ToolCallResult:
+    description: Tool Calling実行結果
+    fields:
+      name:
+        type: string
+        required: true
+        description: ツール名
+      input:
+        type: Record<string, unknown>
+        required: true
+        description: 入力パラメータ
+      output:
+        type: Record<string, unknown>
+        required: true
+        description: 出力結果
+      component:
+        type: string
+        required: false
+        description: 表示に使うVueコンポーネント名
+
+  # ----------------------------------------------------------------------------
+  # Hearing（ヒアリング）
+  # ----------------------------------------------------------------------------
+  # ファイル: packages/shared/src/types/hearing.ts
+  # Firestore: /{bucket}/hearing/{hearingId}
+
+  Hearing:
+    description: ヒアリングセッション
+    fields:
+      id:
+        type: string
+        required: true
+        description: ヒアリングID（Firestore自動生成）
+      started:
+        type: Timestamp
+        required: true
+        description: 開始日時
+      updated:
+        type: Timestamp
+        required: true
+        description: 更新日時
+      messages:
+        type: number
+        required: true
+        description: メッセージ数
+      summary:
+        type: string
+        required: false
+        description: 要約
+
+  # Firestore: /{bucket}/hearing/{hearingId}/messages/{messageId}
+
+  HearingMessage:
+    description: ヒアリングメッセージ
+    fields:
+      id:
+        type: string
+        required: true
+        description: メッセージID（Firestore自動生成）
+      hearing:
+        type: string
+        required: true
+        description: ヒアリングID
+      role:
+        type: HearingRole
+        required: true
+        description: メッセージの役割
+      content:
+        type: string
+        required: true
+        description: メッセージ内容
+      created:
+        type: Timestamp
+        required: true
+        description: 作成日時
+
+# ==============================================================================
+# Pinecone Vector Metadata
+# ==============================================================================
+
+pinecone:
+  index: egographica
+  dimensions: 3072
+  model: text-embedding-3-large
+
+  VectorMetadata:
+    description: Pineconeベクトルメタデータ
+    fields:
+      bucket:
+        type: string
+        required: true
+        description: アーティストバケット名（Namespace）
+      sourcetype:
+        type: string
+        required: true
+        description: データソース種別（work | url | file）
+      source:
+        type: string
+        required: true
+        description: FirestoreドキュメントID
+      title:
+        type: string
+        required: true
+        description: タイトル
+      text:
+        type: string
+        required: true
+        description: 検索用テキスト（max 1000 chars）
+      colors:
+        type: string[]
+        required: false
+        description: 主要な色（ImageAnalysisから）
+      style:
+        type: string
+        required: false
+        description: スタイル（ImageAnalysisから）
+      mood:
+        type: string
+        required: false
+        description: 雰囲気（ImageAnalysisから）
+      created:
+        type: string
+        required: true
+        description: 作成日時（ISO 8601）
+
+# ==============================================================================
+# Firebase Storage Structure
+# ==============================================================================
+
+storage:
+  structure:
+    description: Firebase Storage構造
+    paths:
+      - path: /{bucket}/raw/
+        description: 元ファイル保存（フラット構造、元ファイル名維持）
+        filetypes:
+          - pdf
+          - mp3
+          - m4a
+          - wav
+          - jpg
+          - png
+          - mp4
+
+# ==============================================================================
+# Firestore Collection Structure
+# ==============================================================================
+
+firestore:
+  structure:
+    description: Firestoreコレクション構造
+    collections:
+      - path: /{bucket}/profile
+        type: Profile
+        description: アーティスト基本情報（単一ドキュメント）
+
+      - path: /{bucket}/persona
+        type: Persona
+        description: ペルソナ設定（単一ドキュメント）
+
+      - path: /{bucket}/works/{workId}
+        type: Work
+        description: 作品データ
+
+      - path: /{bucket}/from-url/{urlId}
+        type: FromUrl
+        description: スクレイピングデータ
+
+      - path: /{bucket}/session/{sessionId}
+        type: Session
+        description: エージェント会話セッション
+
+      - path: /{bucket}/session/{sessionId}/messages/{messageId}
+        type: SessionMessage
+        description: エージェント会話メッセージ（サブコレクション）
+
+      - path: /{bucket}/hearing/{hearingId}
+        type: Hearing
+        description: ヒアリングセッション
+
+      - path: /{bucket}/hearing/{hearingId}/messages/{messageId}
+        type: HearingMessage
+        description: ヒアリングメッセージ（サブコレクション）
