@@ -4,6 +4,9 @@ export default defineNuxtConfig({
         compatibilityVersion: 4
     },
     srcDir: "app",
+    devServer: {
+        port: 3010
+    },
     modules: [
         "@nuxtjs/tailwindcss"
     ],

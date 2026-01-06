@@ -3,6 +3,9 @@ import { defineNitroConfig } from "nitropack/config"
 export default defineNitroConfig({
     compatibilityDate: "2025-01-06",
     srcDir: ".",
+    devServer: {
+        port: 3011
+    },
     routeRules: {
         "/api/**": {
             cors: true,
