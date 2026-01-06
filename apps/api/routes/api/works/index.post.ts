@@ -9,7 +9,8 @@ import { getFirestoreInstance, getStorageInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { upsertVectors } from "~/utils/pinecone"
 import { analyzeImage, bufferToBase64 } from "~/utils/ai"
-import { invalidateCache } from "~/utils/cag"
+import { invalidateCache, InvalidationType } from "~/utils/cag"
+import { invalidateVectorCache } from "~/utils/vector-cache"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
 import type { VectorMetadata, ImageAnalysis } from "@egographica/shared"
@@ -146,8 +147,11 @@ export default defineEventHandler(async (event: H3Event) => {
         console.error("Embedding/Pinecone failed:", e)
     }
 
-    // CAGキャッシュを無効化
-    invalidateCache(bucket)
+    // キャッシュを無効化（RAGサマリーとベクター検索）
+    await Promise.all([
+        invalidateCache(bucket, InvalidationType.RAG_SUMMARY),
+        invalidateVectorCache(bucket)
+    ])
 
     return success(event, {
         id: work_id,

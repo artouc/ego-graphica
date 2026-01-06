@@ -1,7 +1,9 @@
 /**
  * ego Graphica - Session History Cache
- * セッション履歴のインメモリキャッシュ
+ * セッション履歴のRedisキャッシュ
  */
+
+import { getRedisClient, REDIS_KEYS, REDIS_TTL } from "./redis"
 
 interface SessionMessage {
     role: string
@@ -10,85 +12,98 @@ interface SessionMessage {
 
 interface CachedSession {
     messages: SessionMessage[]
-    cached_at: Date
+    cached_at: number
 }
-
-/** セッションごとのキャッシュ */
-const session_cache = new Map<string, CachedSession>()
-
-/** キャッシュの有効期限（ミリ秒） */
-const SESSION_CACHE_TTL = 60 * 1000 // 1分
 
 /**
  * キャッシュされたセッション履歴を取得
  */
-export function getCachedSessionHistory(session_id: string): SessionMessage[] | null {
-    const cached = session_cache.get(session_id)
-    if (!cached) return null
+export async function getCachedSessionHistory(
+    session_id: string
+): Promise<SessionMessage[] | null> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.session(session_id)
+        const cached = await redis.get<CachedSession>(key)
 
-    // TTLチェック
-    const age = Date.now() - cached.cached_at.getTime()
-    if (age > SESSION_CACHE_TTL) {
-        session_cache.delete(session_id)
+        if (!cached) return null
+
+        return cached.messages
+    } catch (e) {
+        console.error("Session cache get failed:", e)
         return null
     }
-
-    return cached.messages
 }
 
 /**
  * セッション履歴をキャッシュに設定
  */
-export function setSessionCache(
+export async function setSessionCache(
     session_id: string,
     messages: SessionMessage[]
-): void {
-    session_cache.set(session_id, {
-        messages: [...messages], // コピーを保存
-        cached_at: new Date()
-    })
+): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.session(session_id)
+
+        const data: CachedSession = {
+            messages: [...messages],
+            cached_at: Date.now()
+        }
+
+        await redis.set(key, data, { ex: REDIS_TTL.SESSION })
+    } catch (e) {
+        console.error("Session cache set failed:", e)
+    }
 }
 
 /**
  * セッションキャッシュにメッセージを追加
  */
-export function appendToSessionCache(
+export async function appendToSessionCache(
     session_id: string,
     message: SessionMessage
-): void {
-    const cached = session_cache.get(session_id)
-    if (cached) {
-        cached.messages.push(message)
-        cached.cached_at = new Date()
+): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.session(session_id)
+        const cached = await redis.get<CachedSession>(key)
+
+        if (cached) {
+            cached.messages.push(message)
+            cached.cached_at = Date.now()
+            await redis.set(key, cached, { ex: REDIS_TTL.SESSION })
+        }
+    } catch (e) {
+        console.error("Session cache append failed:", e)
     }
 }
 
 /**
  * セッションキャッシュを無効化
  */
-export function invalidateSessionCache(session_id: string): void {
-    if (session_cache.has(session_id)) {
-        session_cache.delete(session_id)
+export async function invalidateSessionCache(session_id: string): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.session(session_id)
+        await redis.del(key)
+    } catch (e) {
+        console.error("Session cache invalidate failed:", e)
     }
 }
 
 /**
  * 全セッションキャッシュをクリア
  */
-export function clearAllSessionCache(): void {
-    session_cache.clear()
-}
-
-/**
- * セッションキャッシュの統計情報を取得
- */
-export function getSessionCacheStats(): { sessions: number; total_messages: number } {
-    let total_messages = 0
-    for (const cached of session_cache.values()) {
-        total_messages += cached.messages.length
-    }
-    return {
-        sessions: session_cache.size,
-        total_messages
+export async function clearAllSessionCache(): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const keys = await redis.keys("session:*")
+        if (keys.length > 0) {
+            await redis.del(...keys)
+        }
+        console.log("Session cache cleared")
+    } catch (e) {
+        console.error("Session cache clear failed:", e)
     }
 }

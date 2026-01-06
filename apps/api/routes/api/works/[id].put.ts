@@ -8,7 +8,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { upsertVectors } from "~/utils/pinecone"
-import { invalidateCache } from "~/utils/cag"
+import { invalidateCache, InvalidationType } from "~/utils/cag"
+import { invalidateVectorCache } from "~/utils/vector-cache"
 import { success, validationError, notFound } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
 import type { VectorMetadata } from "@egographica/shared"
@@ -125,8 +126,11 @@ export default defineEventHandler(async (event: H3Event) => {
         }
     }
 
-    // CAGキャッシュを無効化
-    invalidateCache(body.bucket)
+    // キャッシュを無効化（RAGサマリーとベクター検索）
+    await Promise.all([
+        invalidateCache(body.bucket, InvalidationType.RAG_SUMMARY),
+        invalidateVectorCache(body.bucket)
+    ])
 
     // 更新後のデータを取得して返す
     const final_doc = await doc_ref.get()

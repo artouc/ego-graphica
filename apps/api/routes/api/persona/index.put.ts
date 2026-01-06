@@ -5,7 +5,7 @@
 
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { getFirestoreInstance } from "~/utils/firebase"
-import { invalidateCache } from "~/utils/cag"
+import { invalidateCache, InvalidationType } from "~/utils/cag"
 import { success, validationError } from "~/utils/response"
 import { ERROR, AIProvider } from "@egographica/shared"
 import type { Persona, SampleResponse } from "@egographica/shared"
@@ -14,7 +14,6 @@ interface RequestBody {
     bucket: string
     character?: string
     motif: string
-    tone: string
     philosophy?: string
     influences: string[]
     samples: SampleResponse[]
@@ -25,7 +24,7 @@ interface RequestBody {
 export default defineEventHandler(async (event: H3Event) => {
     const body = await readBody<RequestBody>(event)
 
-    if (!body.bucket || !body.motif || !body.tone) {
+    if (!body.bucket || !body.motif) {
         validationError(ERROR.VALIDATION.REQUIRED_FIELD)
     }
 
@@ -33,7 +32,6 @@ export default defineEventHandler(async (event: H3Event) => {
 
     const persona: Partial<Persona> = {
         motif: body.motif,
-        tone: body.tone as Persona["tone"],
         influences: body.influences || [],
         samples: body.samples || [],
         avoidances: body.avoidances || []
@@ -45,14 +43,14 @@ export default defineEventHandler(async (event: H3Event) => {
     if (body.philosophy) {
         persona.philosophy = body.philosophy
     }
-    if (body.provider && (body.provider === AIProvider.CLAUDE || body.provider === AIProvider.GROK)) {
+    if (body.provider && body.provider === AIProvider.CLAUDE) {
         persona.provider = body.provider
     }
 
     await db.collection(body.bucket).doc("persona").set(persona)
 
-    // CAGキャッシュを無効化
-    invalidateCache(body.bucket)
+    // CAGキャッシュを無効化（ペルソナのみ）
+    await invalidateCache(body.bucket, InvalidationType.PERSONA_ONLY)
 
     return success(event, { persona })
 })

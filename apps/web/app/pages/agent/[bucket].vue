@@ -7,6 +7,12 @@ definePageMeta({
 
 interface DebugInfo {
     timings: Record<string, number>
+    cache_hits: {
+        cag: boolean
+        session: boolean
+        vector: boolean
+        embedding: boolean
+    }
     rag: string
     cag: {
         persona: {
@@ -181,6 +187,44 @@ async function handleSend() {
                     会話を開始すると参照データが表示されます
                 </div>
                 <div v-else class="text-xs font-mono">
+                    <!-- Redis Cache Status -->
+                    <div class="border-b">
+                        <div class="bg-red-500/10 px-3 py-1.5 font-semibold text-red-600 dark:text-red-400 flex items-center justify-between">
+                            <span>Upstash Redis Cache</span>
+                            <span class="text-xs opacity-70">Total: {{ debug_info.timings.total }}ms</span>
+                        </div>
+                        <div class="px-3 py-2 bg-muted/30 grid grid-cols-2 gap-2">
+                            <div class="flex items-center gap-2">
+                                <span :class="debug_info.cache_hits.cag ? 'text-green-500' : 'text-yellow-500'">
+                                    {{ debug_info.cache_hits.cag ? 'HIT' : 'MISS' }}
+                                </span>
+                                <span class="text-muted-foreground">CAG Context</span>
+                                <span class="opacity-50">({{ debug_info.timings.cag }}ms)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span :class="debug_info.cache_hits.session ? 'text-green-500' : 'text-yellow-500'">
+                                    {{ debug_info.cache_hits.session ? 'HIT' : 'MISS' }}
+                                </span>
+                                <span class="text-muted-foreground">Session</span>
+                                <span class="opacity-50">({{ debug_info.timings.history }}ms)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span :class="debug_info.cache_hits.embedding ? 'text-green-500' : 'text-yellow-500'">
+                                    {{ debug_info.cache_hits.embedding ? 'HIT' : 'MISS' }}
+                                </span>
+                                <span class="text-muted-foreground">Embedding</span>
+                                <span class="opacity-50">({{ debug_info.timings.embedding }}ms)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span :class="debug_info.cache_hits.vector ? 'text-green-500' : 'text-yellow-500'">
+                                    {{ debug_info.cache_hits.vector ? 'HIT' : 'MISS' }}
+                                </span>
+                                <span class="text-muted-foreground">Vector Search</span>
+                                <span class="opacity-50">({{ debug_info.timings.vector_search }}ms)</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- RAG -->
                     <div class="border-b">
                         <div class="bg-blue-500/10 px-3 py-1.5 font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-between">
@@ -210,7 +254,7 @@ async function handleSend() {
                     <div>
                         <div class="bg-purple-500/10 px-3 py-1.5 font-semibold text-purple-600 dark:text-purple-400 flex items-center justify-between">
                             <span>Context Injection (Final)</span>
-                            <span class="text-xs opacity-70">Total: {{ debug_info.timings.total }}ms</span>
+                            <span class="text-xs opacity-70">AI: {{ debug_info.timings.ai_call }}ms</span>
                         </div>
                         <pre class="px-3 py-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-muted/30">{{ debug_info.context_injection }}</pre>
                     </div>

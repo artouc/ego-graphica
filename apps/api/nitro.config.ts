@@ -11,10 +11,11 @@ export default defineNitroConfig({
     },
     runtimeConfig: {
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-        xaiApiKey: process.env.XAI_API_KEY,
         openaiApiKey: process.env.OPENAI_API_KEY,
         pineconeApiKey: process.env.PINECONE_API_KEY,
         pineconeIndex: process.env.PINECONE_INDEX,
+        upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL,
+        upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN,
         firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
         firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,

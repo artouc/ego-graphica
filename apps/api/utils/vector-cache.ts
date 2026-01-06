@@ -1,9 +1,10 @@
 /**
  * ego Graphica - Vector Search Cache
- * ベクター検索結果のインメモリキャッシュ
+ * ベクター検索結果のRedisキャッシュ
  */
 
 import crypto from "crypto"
+import { getRedisClient, REDIS_KEYS, REDIS_TTL } from "./redis"
 
 interface VectorSearchResult {
     id: string
@@ -13,14 +14,8 @@ interface VectorSearchResult {
 
 interface CachedVectorResults {
     results: VectorSearchResult[]
-    cached_at: Date
+    cached_at: number
 }
-
-/** ベクター検索結果のキャッシュ */
-const vector_cache = new Map<string, CachedVectorResults>()
-
-/** キャッシュの有効期限（ミリ秒） */
-const VECTOR_CACHE_TTL = 5 * 60 * 1000 // 5分
 
 /**
  * エンベディングベクターのハッシュを生成
@@ -34,69 +29,77 @@ function hashEmbedding(embedding: number[]): string {
 /**
  * キャッシュされたベクター検索結果を取得
  */
-export function getCachedVectorResults(
+export async function getCachedVectorResults(
     bucket: string,
     embedding: number[]
-): VectorSearchResult[] | null {
-    const key = `${bucket}:${hashEmbedding(embedding)}`
-    const cached = vector_cache.get(key)
+): Promise<VectorSearchResult[] | null> {
+    try {
+        const redis = getRedisClient()
+        const query_hash = hashEmbedding(embedding)
+        const key = REDIS_KEYS.vector(bucket, query_hash)
+        const cached = await redis.get<CachedVectorResults>(key)
 
-    if (!cached) return null
+        if (!cached) return null
 
-    // TTLチェック
-    const age = Date.now() - cached.cached_at.getTime()
-    if (age > VECTOR_CACHE_TTL) {
-        vector_cache.delete(key)
+        return cached.results
+    } catch (e) {
+        console.error("Vector cache get failed:", e)
         return null
     }
-
-    return cached.results
 }
 
 /**
  * ベクター検索結果をキャッシュに設定
  */
-export function setVectorCache(
+export async function setVectorCache(
     bucket: string,
     embedding: number[],
     results: VectorSearchResult[]
-): void {
-    const key = `${bucket}:${hashEmbedding(embedding)}`
-    vector_cache.set(key, {
-        results: [...results], // コピーを保存
-        cached_at: new Date()
-    })
+): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const query_hash = hashEmbedding(embedding)
+        const key = REDIS_KEYS.vector(bucket, query_hash)
+
+        const data: CachedVectorResults = {
+            results: [...results],
+            cached_at: Date.now()
+        }
+
+        await redis.set(key, data, { ex: REDIS_TTL.VECTOR })
+    } catch (e) {
+        console.error("Vector cache set failed:", e)
+    }
 }
 
 /**
  * バケットのベクターキャッシュを無効化
  */
-export function invalidateVectorCache(bucket: string): void {
-    for (const key of vector_cache.keys()) {
-        if (key.startsWith(`${bucket}:`)) {
-            vector_cache.delete(key)
+export async function invalidateVectorCache(bucket: string): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const keys = await redis.keys(`vector:${bucket}:*`)
+        if (keys.length > 0) {
+            await redis.del(...keys)
         }
+        console.log(`Vector cache invalidated for bucket: ${bucket}`)
+    } catch (e) {
+        console.error("Vector cache invalidate failed:", e)
     }
 }
 
 /**
  * 全ベクターキャッシュをクリア
  */
-export function clearAllVectorCache(): void {
-    vector_cache.clear()
-}
-
-/**
- * ベクターキャッシュの統計情報を取得
- */
-export function getVectorCacheStats(): { entries: number; buckets: string[] } {
-    const buckets = new Set<string>()
-    for (const key of vector_cache.keys()) {
-        const bucket = key.split(":")[0]
-        buckets.add(bucket)
-    }
-    return {
-        entries: vector_cache.size,
-        buckets: Array.from(buckets)
+export async function clearAllVectorCache(): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const keys = await redis.keys("vector:*")
+        if (keys.length > 0) {
+            await redis.del(...keys)
+        }
+        console.log("Vector cache cleared")
+    } catch (e) {
+        console.error("Vector cache clear failed:", e)
     }
 }

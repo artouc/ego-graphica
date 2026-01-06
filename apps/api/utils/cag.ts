@@ -1,14 +1,15 @@
 /**
  * ego Graphica - Cache Augmented Generation (CAG)
- * ペルソナとRAGサマリーをインメモリにキャッシュ
+ * ペルソナとRAGサマリーをRedisにキャッシュ
  */
 
 import type { Persona } from "@egographica/shared"
+import { getRedisClient, REDIS_KEYS, REDIS_TTL } from "./redis"
 
 interface CachedContext {
     persona: Persona | null
     rag_summary: string
-    cached_at: Date
+    cached_at: number
 }
 
 /**
@@ -20,39 +21,47 @@ export enum InvalidationType {
     FULL = "full"
 }
 
-/** バケットごとのキャッシュ */
-const cache = new Map<string, CachedContext>()
-
-/** キャッシュの有効期限（ミリ秒） */
-const CACHE_TTL = 60 * 60 * 1000 // 1時間
-
 /**
- * キャッシュを取得
+ * キャッシュを取得（Redis）
  */
-export function getCache(bucket: string): CachedContext | null {
-    const cached = cache.get(bucket)
-    if (!cached) return null
+export async function getCache(bucket: string): Promise<CachedContext | null> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.cagContext(bucket)
+        const cached = await redis.get<CachedContext>(key)
 
-    // TTLチェック
-    const now = new Date()
-    if (now.getTime() - cached.cached_at.getTime() > CACHE_TTL) {
-        cache.delete(bucket)
+        if (!cached) return null
+
+        return cached
+    } catch (e) {
+        console.error("CAG cache get failed:", e)
         return null
     }
-
-    return cached
 }
 
 /**
- * キャッシュを設定
+ * キャッシュを設定（Redis）
  */
-export function setCache(bucket: string, persona: Persona | null, rag_summary: string): void {
-    cache.set(bucket, {
-        persona,
-        rag_summary,
-        cached_at: new Date()
-    })
-    console.log(`CAG cache set for bucket: ${bucket}`)
+export async function setCache(
+    bucket: string,
+    persona: Persona | null,
+    rag_summary: string
+): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.cagContext(bucket)
+
+        const data: CachedContext = {
+            persona,
+            rag_summary,
+            cached_at: Date.now()
+        }
+
+        await redis.set(key, data, { ex: REDIS_TTL.CAG_CONTEXT })
+        console.log(`CAG cache set for bucket: ${bucket}`)
+    } catch (e) {
+        console.error("CAG cache set failed:", e)
+    }
 }
 
 /**
@@ -60,44 +69,55 @@ export function setCache(bucket: string, persona: Persona | null, rag_summary: s
  * @param bucket バケット名
  * @param type 無効化の種類（デフォルト: FULL）
  */
-export function invalidateCache(
+export async function invalidateCache(
     bucket: string,
     type: InvalidationType = InvalidationType.FULL
-): void {
-    const cached = cache.get(bucket)
-    if (!cached) return
+): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        const key = REDIS_KEYS.cagContext(bucket)
 
-    switch (type) {
-        case InvalidationType.PERSONA_ONLY:
-            cached.persona = null
-            console.log(`CAG persona cache invalidated for bucket: ${bucket}`)
-            break
-        case InvalidationType.RAG_SUMMARY:
-            cached.rag_summary = ""
-            console.log(`CAG RAG summary cache invalidated for bucket: ${bucket}`)
-            break
-        case InvalidationType.FULL:
-            cache.delete(bucket)
+        if (type === InvalidationType.FULL) {
+            await redis.del(key)
             console.log(`CAG cache fully invalidated for bucket: ${bucket}`)
-            break
+            return
+        }
+
+        // 部分的な無効化: 既存のデータを取得して更新
+        const cached = await redis.get<CachedContext>(key)
+        if (!cached) return
+
+        switch (type) {
+            case InvalidationType.PERSONA_ONLY:
+                cached.persona = null
+                await redis.set(key, cached, { ex: REDIS_TTL.CAG_CONTEXT })
+                console.log(`CAG persona cache invalidated for bucket: ${bucket}`)
+                break
+            case InvalidationType.RAG_SUMMARY:
+                cached.rag_summary = ""
+                await redis.set(key, cached, { ex: REDIS_TTL.CAG_CONTEXT })
+                console.log(`CAG RAG summary cache invalidated for bucket: ${bucket}`)
+                break
+        }
+    } catch (e) {
+        console.error("CAG cache invalidate failed:", e)
     }
 }
 
 /**
- * 全キャッシュをクリア
+ * 全キャッシュをクリア（パターンマッチで削除）
  */
-export function clearAllCache(): void {
-    cache.clear()
-    console.log("CAG cache cleared")
-}
-
-/**
- * キャッシュ統計を取得
- */
-export function getCacheStats(): { buckets: string[]; count: number } {
-    return {
-        buckets: Array.from(cache.keys()),
-        count: cache.size
+export async function clearAllCache(): Promise<void> {
+    try {
+        const redis = getRedisClient()
+        // Upstash では SCAN を使ってパターンマッチ削除
+        const keys = await redis.keys("cag:context:*")
+        if (keys.length > 0) {
+            await redis.del(...keys)
+        }
+        console.log("CAG cache cleared")
+    } catch (e) {
+        console.error("CAG cache clear failed:", e)
     }
 }
 

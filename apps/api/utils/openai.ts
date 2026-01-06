@@ -5,6 +5,7 @@
 import { createOpenAI } from "@ai-sdk/openai"
 import { embed } from "ai"
 import { LOG } from "@egographica/shared"
+import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache"
 
 let openai_client: ReturnType<typeof createOpenAI> | null = null
 
@@ -23,8 +24,14 @@ export function getOpenAIClient(): ReturnType<typeof createOpenAI> {
     return openai_client
 }
 
-/** テキストをEmbeddingに変換 */
+/** テキストをEmbeddingに変換（キャッシュ対応） */
 export async function generateEmbedding(text: string): Promise<number[]> {
+    // キャッシュをチェック
+    const cached = await getCachedEmbedding(text)
+    if (cached) {
+        return cached
+    }
+
     console.log(LOG.DATA.EMBEDDING_GENERATING)
 
     const openai = getOpenAIClient()
@@ -35,6 +42,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     })
 
     console.log(LOG.DATA.EMBEDDING_GENERATED)
+
+    // キャッシュに保存
+    await setCachedEmbedding(text, embedding)
 
     return embedding
 }

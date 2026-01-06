@@ -125,6 +125,12 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
 export default defineEventHandler(async (event: H3Event) => {
     const total_start = Date.now()
     const timings: Record<string, number> = {}
+    const cache_hits: Record<string, boolean> = {
+        cag: false,
+        session: false,
+        vector: false,
+        embedding: false
+    }
 
     const body = await readBody<RequestBody>(event)
 
@@ -136,14 +142,15 @@ export default defineEventHandler(async (event: H3Event) => {
 
     const db = getFirestoreInstance()
 
-    // CAG: キャッシュからペルソナとRAGサマリーを取得
+    // CAG: キャッシュからペルソナとRAGサマリーを取得（Redis）
     const cag_start = Date.now()
     let persona: Persona | null = null
     let rag_summary = ""
-    const cached = getCache(body.bucket)
+    const cached = await getCache(body.bucket)
 
     if (cached) {
-        console.log("CAG: Using cached context")
+        console.log("CAG: Using cached context (Redis)")
+        cache_hits.cag = true
         persona = cached.persona
         rag_summary = cached.rag_summary
     } else {
@@ -161,8 +168,8 @@ export default defineEventHandler(async (event: H3Event) => {
         // RAGサマリーを構築
         rag_summary = await buildRagSummary(db, body.bucket)
 
-        // キャッシュに保存
-        setCache(body.bucket, persona, rag_summary)
+        // キャッシュに保存（Redis）
+        await setCache(body.bucket, persona, rag_summary)
     }
     timings.cag = Date.now() - cag_start
 
@@ -179,16 +186,19 @@ export default defineEventHandler(async (event: H3Event) => {
             const embed_start = Date.now()
             const query_embedding = await generateEmbedding(body.message)
             timings.embedding = Date.now() - embed_start
+            // 20ms未満ならキャッシュヒットと判定（API呼び出しは100-300ms）
+            cache_hits.embedding = timings.embedding < 20
 
-            // ベクター検索キャッシュをチェック
+            // ベクター検索キャッシュをチェック（Redis）
             const vector_start = Date.now()
-            let results = getCachedVectorResults(body.bucket, query_embedding)
+            let results = await getCachedVectorResults(body.bucket, query_embedding)
             if (results) {
-                console.log("Vector cache HIT")
+                console.log("Vector cache HIT (Redis)")
+                cache_hits.vector = true
             } else {
                 console.log("Vector cache MISS - querying Pinecone")
                 results = await queryVectors(body.bucket, query_embedding, 5)
-                setVectorCache(body.bucket, query_embedding, results)
+                await setVectorCache(body.bucket, query_embedding, results)
             }
             timings.vector_search = Date.now() - vector_start
 
@@ -233,13 +243,14 @@ export default defineEventHandler(async (event: H3Event) => {
         .doc(session_id)
         .collection("messages")
 
-    // 過去の会話履歴を取得（キャッシュ優先）
+    // 過去の会話履歴を取得（Redisキャッシュ優先）
     const history_start = Date.now()
     let conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
-    const cached_history = getCachedSessionHistory(session_id)
+    const cached_history = await getCachedSessionHistory(session_id)
 
     if (cached_history) {
-        console.log("Session cache HIT")
+        console.log("Session cache HIT (Redis)")
+        cache_hits.session = true
         conversation_history = cached_history as Array<{ role: "user" | "assistant"; content: string }>
     } else {
         console.log("Session cache MISS - loading from Firestore")
@@ -253,8 +264,8 @@ export default defineEventHandler(async (event: H3Event) => {
                 })
             }
         }
-        // セッションキャッシュに保存
-        setSessionCache(session_id, conversation_history)
+        // セッションキャッシュに保存（Redis）
+        await setSessionCache(session_id, conversation_history)
     }
     timings.history = Date.now() - history_start
 
@@ -418,7 +429,7 @@ export default defineEventHandler(async (event: H3Event) => {
                 content: msg,
                 created: FieldValue.serverTimestamp()
             })
-            appendToSessionCache(session_id, { role: "assistant", content: msg })
+            await appendToSessionCache(session_id, { role: "assistant", content: msg })
         }
 
         await db
@@ -455,6 +466,7 @@ export default defineEventHandler(async (event: H3Event) => {
             messages: response_messages, // 複数メッセージを配列で返す
             _debug: {
                 timings,
+                cache_hits,
                 rag: realtime_context || "(スキップ)",
                 cag: {
                     persona: persona ? {
