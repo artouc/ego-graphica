@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue"
+import { AIProvider } from "@egographica/shared"
 
 definePageMeta({
     layout: "default"
@@ -17,7 +18,7 @@ const form = ref({
     sample_situation: "",
     sample_message: "",
     sample_response: "",
-    provider: "claude"
+    provider: AIProvider.CLAUDE_SONNET as string
 })
 
 const is_loading = ref(false)
@@ -47,7 +48,7 @@ async function fetchPersona() {
             form.value.philosophy = p.philosophy || ""
             form.value.influences = (p.influences || []).join(", ")
             form.value.avoidances = (p.avoidances || []).join(", ")
-            form.value.provider = p.provider || "claude"
+            form.value.provider = p.provider || AIProvider.CLAUDE_SONNET
 
             if (p.samples && p.samples.length > 0) {
                 form.value.sample_situation = p.samples[0].situation || ""
@@ -140,17 +141,17 @@ watch(() => auth.bucket.value, (newBucket) => {
                 <UiCardContent>
                     <div class="space-y-4">
                         <div class="space-y-2">
-                            <UiLabel for="provider">AIプロバイダー</UiLabel>
+                            <UiLabel for="provider">AIモデル</UiLabel>
                             <select
                                 id="provider"
                                 v-model="form.provider"
                                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             >
-                                <option value="claude">Claude Opus 4.5 (高品質・Tool Calling対応)</option>
-                                <option value="gpt-4o-mini">GPT-4o-mini (高速・低コスト)</option>
+                                <option :value="AIProvider.CLAUDE_SONNET">Claude Sonnet 4.5 (推奨・高速)</option>
+                                <option :value="AIProvider.CLAUDE_OPUS">Claude Opus 4.5 (最高品質)</option>
                             </select>
                             <p class="text-xs text-muted-foreground">
-                                Claude Opus: 高品質な応答。GPT-4o-mini: 高速応答・低コスト。どちらもTool Calling対応。
+                                Sonnet: 高速で実用的な応答（推奨）。Opus: より高品質だが低速・高コスト。
                             </p>
                         </div>
 

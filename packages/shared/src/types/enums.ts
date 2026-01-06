@@ -52,7 +52,7 @@ export type SourceType = (typeof SourceType)[keyof typeof SourceType]
 
 /** AIプロバイダー */
 export const AIProvider = {
-    CLAUDE: "claude",
-    GPT4O_MINI: "gpt-4o-mini"
+    CLAUDE_OPUS: "claude-opus-4-5",
+    CLAUDE_SONNET: "claude-sonnet-4-5"
 } as const
 export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]

@@ -4,7 +4,6 @@
 
 import { generateText } from "ai"
 import { getClaudeOpus } from "./anthropic"
-import { getOpenAIClient } from "./openai"
 import { LOG } from "@egographica/shared"
 import type { ImageAnalysis } from "@egographica/shared"
 

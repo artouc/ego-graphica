@@ -5,38 +5,15 @@ definePageMeta({
     layout: "default"
 })
 
-interface DebugInfo {
-    provider: string
-    timings: Record<string, number>
-    cache_hits: {
-        cag: boolean
-        session: boolean
-        vector: boolean
-        embedding: boolean
-    }
-    rag: string
-    cag: {
-        persona: {
-            character?: string
-            philosophy?: string
-            writing_style?: string
-        } | null
-        rag_summary: string
-    }
-    context_injection: string
-}
-
 const config = useRuntimeConfig()
 const route = useRoute()
 const bucket = computed(() => route.params.bucket as string)
 
-const messages = ref<Array<{ role: "user" | "assistant"; content: string }>>([])
+const messages = ref<Array<{ role: "user" | "assistant"; content: string; streaming?: boolean }>>([])
 const input = ref("")
 const is_loading = ref(false)
-const is_typing = ref(false) // 追加メッセージ入力中
 const session_id = ref<string | null>(null)
 const messages_container = ref<HTMLElement | null>(null)
-const debug_info = ref<DebugInfo | null>(null)
 
 async function scrollToBottom() {
     await nextTick()
@@ -52,10 +29,6 @@ function handleKeydown(event: KeyboardEvent) {
     }
 }
 
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 async function handleSend() {
     if (!input.value.trim()) return
 
@@ -65,59 +38,100 @@ async function handleSend() {
     await scrollToBottom()
 
     is_loading.value = true
-    debug_info.value = null
 
     try {
-        const response = await $fetch<{
-            data: {
-                session_id: string
-                messages: string[] // 複数メッセージ
-                _debug: DebugInfo
-            }
-        }>(
-            `${config.public.apiUrl}/api/chat`,
-            {
-                method: "POST",
-                headers: {
-                    "X-API-Key": config.public.masterApiKey,
-                    "X-Bucket": bucket.value
-                },
-                body: {
-                    bucket: bucket.value,
-                    message: user_message,
-                    session_id: session_id.value
+        let current_message_index = -1
+
+        const response = await fetch(`${config.public.apiUrl}/api/chat`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": config.public.masterApiKey,
+                "X-Bucket": bucket.value
+            },
+            body: JSON.stringify({
+                bucket: bucket.value,
+                message: user_message,
+                session_id: session_id.value
+            })
+        })
+
+        if (!response.ok) {
+            throw new Error("Request failed")
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+            throw new Error("No response body")
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ""
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+
+            const lines = buffer.split("\n")
+            buffer = lines.pop() || ""
+
+            for (const line of lines) {
+                if (line.startsWith("data:")) {
+                    const data_str = line.slice(5).trim()
+                    if (!data_str) continue
+
+                    try {
+                        const data = JSON.parse(data_str)
+
+                        if ("session_id" in data) {
+                            session_id.value = data.session_id
+                            console.log("[SSE] session:", data.session_id)
+                        } else if ("text" in data) {
+                            if (current_message_index === -1) {
+                                console.log("[SSE] New message started")
+                                messages.value.push({
+                                    role: "assistant",
+                                    content: data.text,
+                                    streaming: true
+                                })
+                                current_message_index = messages.value.length - 1
+                            } else {
+                                messages.value[current_message_index].content += data.text
+                            }
+                            await scrollToBottom()
+                        } else if ("message" in data) {
+                            console.log("[SSE] Message complete:", data.message.slice(0, 30))
+                            if (current_message_index !== -1) {
+                                messages.value[current_message_index].streaming = false
+                                messages.value[current_message_index].content = data.message
+                            }
+                            current_message_index = -1
+                            await scrollToBottom()
+                        } else if ("message_count" in data) {
+                            console.log("[SSE] Done, total messages:", data.message_count)
+                        } else if ("error" in data) {
+                            console.error("[SSE] Error:", data.error)
+                            messages.value.push({
+                                role: "assistant",
+                                content: "エラーが発生しました。もう一度お試しください。"
+                            })
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse SSE data:", data_str, e)
+                    }
                 }
             }
-        )
-
-        session_id.value = response.data.session_id
-        debug_info.value = response.data._debug
-        is_loading.value = false
-
-        // 複数メッセージを順番に表示（リアル感を出すためdelayあり）
-        const ai_messages = response.data.messages
-        for (let i = 0; i < ai_messages.length; i++) {
-            if (i > 0) {
-                // 2つ目以降のメッセージは少し待ってから表示
-                is_typing.value = true
-                await scrollToBottom()
-                await sleep(800 + Math.random() * 400) // 800-1200ms
-                is_typing.value = false
-            }
-            messages.value.push({
-                role: "assistant",
-                content: ai_messages[i]
-            })
-            await scrollToBottom()
         }
     } catch (e) {
+        console.error("Error:", e)
         messages.value.push({
             role: "assistant",
             content: "エラーが発生しました。もう一度お試しください。"
         })
     } finally {
         is_loading.value = false
-        is_typing.value = false
     }
 }
 </script>
@@ -132,8 +146,7 @@ async function handleSend() {
             <span class="text-sm text-muted-foreground">バケット: {{ bucket }}</span>
         </div>
 
-        <!-- 上半分: チャット -->
-        <UiCard class="flex-1 flex flex-col overflow-hidden mb-4" style="max-height: 50%;">
+        <UiCard class="flex-1 flex flex-col overflow-hidden">
             <UiCardContent class="flex-1 overflow-hidden flex flex-col p-4">
                 <div ref="messages_container" class="flex-1 overflow-y-auto space-y-3 mb-3">
                     <div v-if="messages.length === 0" class="text-center text-muted-foreground py-4">
@@ -149,13 +162,13 @@ async function handleSend() {
                                 : 'bg-muted'
                         ]"
                     >
-                        <div class="whitespace-pre-wrap text-sm">{{ msg.content }}</div>
+                        <div class="whitespace-pre-wrap text-sm">
+                            {{ msg.content }}
+                            <span v-if="msg.streaming" class="animate-pulse">▊</span>
+                        </div>
                     </div>
-                    <div v-if="is_loading" class="p-3 rounded-lg bg-muted max-w-[80%]">
+                    <div v-if="is_loading && messages[messages.length - 1]?.role !== 'assistant'" class="p-3 rounded-lg bg-muted max-w-[80%]">
                         <span class="animate-pulse text-sm">考え中...</span>
-                    </div>
-                    <div v-if="is_typing" class="p-3 rounded-lg bg-muted max-w-[80%]">
-                        <span class="animate-pulse text-sm">入力中...</span>
                     </div>
                 </div>
 
@@ -174,101 +187,6 @@ async function handleSend() {
                     >
                         送信
                     </UiButton>
-                </div>
-            </UiCardContent>
-        </UiCard>
-
-        <!-- 下半分: ログウィンドウ -->
-        <UiCard class="flex-1 flex flex-col overflow-hidden" style="max-height: 50%;">
-            <UiCardHeader class="py-2 px-4 border-b">
-                <UiCardTitle class="text-sm font-medium">参照データログ</UiCardTitle>
-            </UiCardHeader>
-            <UiCardContent class="flex-1 overflow-y-auto p-0">
-                <div v-if="!debug_info" class="text-center text-muted-foreground py-8 text-sm">
-                    会話を開始すると参照データが表示されます
-                </div>
-                <div v-else class="text-xs font-mono">
-                    <!-- AI Provider -->
-                    <div class="border-b">
-                        <div class="px-3 py-2 bg-muted/50 flex items-center justify-between">
-                            <span class="font-semibold">AI Provider</span>
-                            <span :class="debug_info.provider === 'gpt-4o-mini' ? 'text-emerald-600 dark:text-emerald-400' : 'text-orange-600 dark:text-orange-400'">
-                                {{ debug_info.provider === 'gpt-4o-mini' ? 'GPT-4o-mini (OpenAI)' : 'Claude Opus (Anthropic)' }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Redis Cache Status -->
-                    <div class="border-b">
-                        <div class="bg-red-500/10 px-3 py-1.5 font-semibold text-red-600 dark:text-red-400 flex items-center justify-between">
-                            <span>Upstash Redis Cache</span>
-                            <span class="text-xs opacity-70">Total: {{ debug_info.timings.total }}ms</span>
-                        </div>
-                        <div class="px-3 py-2 bg-muted/30 grid grid-cols-2 gap-2">
-                            <div class="flex items-center gap-2">
-                                <span :class="debug_info.cache_hits.cag ? 'text-green-500' : 'text-yellow-500'">
-                                    {{ debug_info.cache_hits.cag ? 'HIT' : 'MISS' }}
-                                </span>
-                                <span class="text-muted-foreground">CAG Context</span>
-                                <span class="opacity-50">({{ debug_info.timings.cag }}ms)</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span :class="debug_info.cache_hits.session ? 'text-green-500' : 'text-yellow-500'">
-                                    {{ debug_info.cache_hits.session ? 'HIT' : 'MISS' }}
-                                </span>
-                                <span class="text-muted-foreground">Session</span>
-                                <span class="opacity-50">({{ debug_info.timings.history }}ms)</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span :class="debug_info.cache_hits.embedding ? 'text-green-500' : 'text-yellow-500'">
-                                    {{ debug_info.cache_hits.embedding ? 'HIT' : 'MISS' }}
-                                </span>
-                                <span class="text-muted-foreground">Embedding</span>
-                                <span class="opacity-50">({{ debug_info.timings.embedding }}ms)</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span :class="debug_info.cache_hits.vector ? 'text-green-500' : 'text-yellow-500'">
-                                    {{ debug_info.cache_hits.vector ? 'HIT' : 'MISS' }}
-                                </span>
-                                <span class="text-muted-foreground">Vector Search</span>
-                                <span class="opacity-50">({{ debug_info.timings.vector_search }}ms)</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- RAG -->
-                    <div class="border-b">
-                        <div class="bg-blue-500/10 px-3 py-1.5 font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-between">
-                            <span>RAG (Realtime Search)</span>
-                            <span class="text-xs opacity-70">{{ debug_info.timings.embedding + debug_info.timings.vector_search }}ms</span>
-                        </div>
-                        <pre class="px-3 py-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-muted/30">{{ debug_info.rag }}</pre>
-                    </div>
-
-                    <!-- CAG -->
-                    <div class="border-b">
-                        <div class="bg-green-500/10 px-3 py-1.5 font-semibold text-green-600 dark:text-green-400 flex items-center justify-between">
-                            <span>CAG (Cached Context)</span>
-                            <span class="text-xs opacity-70">{{ debug_info.timings.cag }}ms</span>
-                        </div>
-                        <div class="px-3 py-2 bg-muted/30">
-                            <div v-if="debug_info.cag.persona" class="mb-2">
-                                <span class="text-muted-foreground">Persona:</span>
-                                <span class="ml-1">{{ debug_info.cag.persona.character || "(名前なし)" }}</span>
-                            </div>
-                            <div class="text-muted-foreground mb-1">RAG Summary:</div>
-                            <pre class="whitespace-pre-wrap break-all max-h-24 overflow-y-auto">{{ debug_info.cag.rag_summary }}</pre>
-                        </div>
-                    </div>
-
-                    <!-- Context Injection -->
-                    <div>
-                        <div class="bg-purple-500/10 px-3 py-1.5 font-semibold text-purple-600 dark:text-purple-400 flex items-center justify-between">
-                            <span>Context Injection (Final)</span>
-                            <span class="text-xs opacity-70">AI: {{ debug_info.timings.ai_call }}ms</span>
-                        </div>
-                        <pre class="px-3 py-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-muted/30">{{ debug_info.context_injection }}</pre>
-                    </div>
                 </div>
             </UiCardContent>
         </UiCard>

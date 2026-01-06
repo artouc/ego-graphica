@@ -1,10 +1,9 @@
 /**
  * ego Graphica - Chat Tools
- * プロバイダー共通のツール定義と会話ハンドラー
+ * Anthropic Claude用のツール定義と会話ハンドラー（ストリーミング）
  */
 
 import type Anthropic from "@anthropic-ai/sdk"
-import type OpenAI from "openai"
 
 /** ツールパラメータの型 */
 interface ToolParameter {
@@ -24,9 +23,8 @@ interface ToolDefinition {
     }
 }
 
-/** shouldKeepTalking の入力型 */
-export interface ShouldKeepTalkingInput {
-    message: string
+/** shouldContinue の入力型 */
+export interface ShouldContinueInput {
     have_more_to_say: boolean
     next_topic: string
 }
@@ -34,7 +32,6 @@ export interface ShouldKeepTalkingInput {
 /** ツール実行結果 */
 export interface ToolExecutionResult {
     should_continue: boolean
-    message: string | null
     result: string
 }
 
@@ -44,9 +41,12 @@ export interface ConversationMessage {
     content: string
 }
 
-/** 会話実行結果 */
-export interface ConversationResult {
-    messages: string[]
+/** ストリーミングコールバック */
+export interface StreamCallbacks {
+    onTextDelta: (text: string) => void
+    onMessageComplete: (message: string) => void
+    onDone: () => void
+    onError: (error: Error) => void
 }
 
 /**
@@ -54,25 +54,21 @@ export interface ConversationResult {
  */
 export const CHAT_TOOLS: ToolDefinition[] = [
     {
-        name: "sendMessage",
-        description: "顧客にメッセージを送信する。必ずこのツールを使って応答すること。",
+        name: "shouldContinue",
+        description: "テキスト応答を書いた直後に必ず呼び出す。会話を続けるかどうかを判断するための内部ツール。このツールについて顧客に説明してはいけない。",
         parameters: {
             type: "object",
             properties: {
-                message: {
-                    type: "string",
-                    description: "顧客に送信するメッセージ（1-2文の短いメッセージ）"
-                },
                 have_more_to_say: {
                     type: "boolean",
-                    description: "まだ伝えたいことがあるならtrue、十分ならfalse"
+                    description: "続けて話したいならtrue、終わりならfalse"
                 },
                 next_topic: {
                     type: "string",
-                    description: "次に話す内容、または「なし」"
+                    description: "次の話題、または「なし」"
                 }
             },
-            required: ["message", "have_more_to_say", "next_topic"]
+            required: ["have_more_to_say", "next_topic"]
         }
     }
 ]
@@ -92,23 +88,6 @@ export function getAnthropicTools() {
     }))
 }
 
-/**
- * OpenAI SDK形式に変換
- */
-export function getOpenAITools() {
-    return CHAT_TOOLS.map(tool => ({
-        type: "function" as const,
-        function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: {
-                type: tool.parameters.type,
-                properties: tool.parameters.properties,
-                required: tool.parameters.required
-            }
-        }
-    }))
-}
 
 /**
  * ツールを実行
@@ -118,21 +97,21 @@ export function executeTool(
     input: unknown
 ): ToolExecutionResult {
     switch (tool_name) {
-        case "sendMessage": {
-            const { message, have_more_to_say, next_topic } = input as ShouldKeepTalkingInput
-            console.log("sendMessage:", { message: message?.slice(0, 50), have_more_to_say, next_topic })
+        case "shouldContinue": {
+            const { have_more_to_say, next_topic } = input as ShouldContinueInput
+            // undefined の場合は false として扱う
+            const should_continue = have_more_to_say === true
+            console.log("shouldContinue:", { have_more_to_say, next_topic, should_continue })
 
             return {
-                should_continue: have_more_to_say,
-                message: message || null,
-                result: JSON.stringify({ sent: true, continue: have_more_to_say, topic: next_topic })
+                should_continue,
+                result: JSON.stringify({ continue: should_continue, topic: next_topic || "なし" })
             }
         }
         default:
             console.warn(`Unknown tool: ${tool_name}`)
             return {
                 should_continue: false,
-                message: null,
                 result: JSON.stringify({ error: `Unknown tool: ${tool_name}` })
             }
     }
@@ -142,17 +121,18 @@ export function executeTool(
 const MAX_STEPS = 5
 
 /**
- * Claude で会話を実行（ツール呼び出しループ付き）
+ * Claude で会話を実行（ストリーミング）
  */
-export async function runClaudeConversation(
+export async function runClaudeConversationStream(
     client: Anthropic,
+    model: string,
     system_prompt: string,
-    conversation_history: ConversationMessage[]
-): Promise<ConversationResult> {
-    const response_messages: string[] = []
+    conversation_history: ConversationMessage[],
+    callbacks: StreamCallbacks
+): Promise<void> {
     const tools = getAnthropicTools()
+    console.log("Claude model:", model)
 
-    // Anthropic形式のメッセージ履歴
     type AnthropicMessage = {
         role: "user" | "assistant"
         content: string | Array<
@@ -169,168 +149,109 @@ export async function runClaudeConversation(
 
     let should_continue = true
     for (let step = 0; step < MAX_STEPS && should_continue; step++) {
-        const response = await client.messages.create({
-            model: "claude-opus-4-5",
-            max_tokens: 350,
-            system: system_prompt,
-            messages: current_messages,
-            tools
-        })
+        let current_text = ""
+        const tool_uses: Map<number, { id: string; name: string; input: string }> = new Map()
 
-        const assistant_content: Array<
-            | { type: "text"; text: string }
-            | { type: "tool_use"; id: string; name: string; input: unknown }
-        > = []
+        try {
+            const stream = client.messages.stream({
+                model,
+                max_tokens: 350,
+                system: system_prompt,
+                messages: current_messages,
+                tools
+            })
 
-        // レスポンスを処理
-        for (const content of response.content) {
-            if (content.type === "text") {
-                // テキストレスポンスは無視（ツールからメッセージを取得）
-                assistant_content.push({ type: "text", text: content.text })
-            } else if (content.type === "tool_use") {
+            for await (const event of stream) {
+                if (event.type === "content_block_start") {
+                    if (event.content_block.type === "tool_use") {
+                        console.log("Tool use started:", event.content_block.name, "at index", event.index)
+                        tool_uses.set(event.index, {
+                            id: event.content_block.id,
+                            name: event.content_block.name,
+                            input: ""
+                        })
+                    }
+                } else if (event.type === "content_block_delta") {
+                    if (event.delta.type === "text_delta") {
+                        current_text += event.delta.text
+                        callbacks.onTextDelta(event.delta.text)
+                    } else if (event.delta.type === "input_json_delta") {
+                        const tool = tool_uses.get(event.index)
+                        if (tool) {
+                            tool.input += event.delta.partial_json
+                        }
+                    }
+                }
+            }
+
+            console.log("Stream complete. Text:", current_text.slice(0, 50), "Tools:", tool_uses.size)
+
+            if (current_text.trim()) {
+                callbacks.onMessageComplete(current_text.trim())
+            }
+
+            const assistant_content: Array<
+                | { type: "text"; text: string }
+                | { type: "tool_use"; id: string; name: string; input: unknown }
+            > = []
+
+            if (current_text) {
+                assistant_content.push({ type: "text", text: current_text })
+            }
+
+            const tool_list = Array.from(tool_uses.values())
+            for (const tool of tool_list) {
                 assistant_content.push({
                     type: "tool_use",
-                    id: content.id,
-                    name: content.name,
-                    input: content.input
+                    id: tool.id,
+                    name: tool.name,
+                    input: tool.input ? JSON.parse(tool.input) : {}
                 })
             }
-        }
 
-        current_messages.push({
-            role: "assistant",
-            content: assistant_content
-        })
-
-        // ツール呼び出しを抽出
-        const tool_uses = response.content.filter(
-            (c): c is Anthropic.ToolUseBlock => c.type === "tool_use"
-        )
-
-        if (tool_uses.length === 0) {
-            should_continue = false
-            break
-        }
-
-        // ツールを実行してメッセージを収集
-        const tool_results: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = []
-        for (const tool_use of tool_uses) {
-            const result = executeTool(tool_use.name, tool_use.input)
-
-            // ツールからメッセージを収集
-            if (result.message) {
-                response_messages.push(result.message)
-            }
-
-            tool_results.push({
-                type: "tool_result",
-                tool_use_id: tool_use.id,
-                content: result.result
+            current_messages.push({
+                role: "assistant",
+                content: assistant_content
             })
 
-            if (!result.should_continue) {
+            if (tool_list.length === 0) {
                 should_continue = false
                 break
             }
-        }
 
-        if (tool_results.length === 0 || !should_continue) {
-            break
-        }
+            const tool_results: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = []
+            for (const tool of tool_list) {
+                console.log("Tool input raw:", tool.name, tool.input)
+                const input = tool.input ? JSON.parse(tool.input) : {}
+                console.log("Tool input parsed:", tool.name, input)
+                const result = executeTool(tool.name, input)
+                console.log("Tool executed:", tool.name, "should_continue:", result.should_continue)
 
-        current_messages.push({
-            role: "user",
-            content: tool_results
-        })
-    }
+                tool_results.push({
+                    type: "tool_result",
+                    tool_use_id: tool.id,
+                    content: result.result
+                })
 
-    return { messages: response_messages }
-}
-
-/**
- * GPT-4o-mini で会話を実行（ツール呼び出しループ付き）
- */
-export async function runOpenAIConversation(
-    client: OpenAI,
-    system_prompt: string,
-    conversation_history: ConversationMessage[]
-): Promise<ConversationResult> {
-    const response_messages: string[] = []
-    const tools = getOpenAITools()
-
-    // OpenAI形式のメッセージ履歴
-    type OpenAIMessage =
-        | { role: "system" | "user" | "assistant"; content: string }
-        | { role: "assistant"; content: string | null; tool_calls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> }
-        | { role: "tool"; tool_call_id: string; content: string }
-
-    const openai_messages: OpenAIMessage[] = [
-        { role: "system", content: system_prompt }
-    ]
-
-    for (const msg of conversation_history) {
-        openai_messages.push({
-            role: msg.role,
-            content: msg.content
-        })
-    }
-
-    let should_continue = true
-    for (let step = 0; step < MAX_STEPS && should_continue; step++) {
-        const response = await client.chat.completions.create({
-            model: "gpt-4o-mini",
-            max_tokens: 500,
-            messages: openai_messages,
-            tools,
-            // ツール使用を強制
-            tool_choice: "required"
-        })
-
-        const choice = response.choices[0]
-        const message = choice?.message
-
-        // ツール呼び出しがない場合は終了
-        if (!message?.tool_calls || message.tool_calls.length === 0) {
-            should_continue = false
-            break
-        }
-
-        // アシスタントメッセージを追加（ツール呼び出し付き）
-        openai_messages.push({
-            role: "assistant",
-            content: message.content,
-            tool_calls: message.tool_calls.map(tc => ({
-                id: tc.id,
-                type: "function" as const,
-                function: {
-                    name: tc.function.name,
-                    arguments: tc.function.arguments
+                if (!result.should_continue) {
+                    should_continue = false
+                    break
                 }
-            }))
-        })
-
-        // ツールを実行してメッセージを収集
-        for (const tool_call of message.tool_calls) {
-            const input = JSON.parse(tool_call.function.arguments)
-            const result = executeTool(tool_call.function.name, input)
-
-            // ツールからメッセージを収集
-            if (result.message) {
-                response_messages.push(result.message)
             }
 
-            openai_messages.push({
-                role: "tool",
-                tool_call_id: tool_call.id,
-                content: result.result
-            })
-
-            if (!result.should_continue) {
-                should_continue = false
+            if (tool_results.length === 0 || !should_continue) {
                 break
             }
+
+            current_messages.push({
+                role: "user",
+                content: tool_results
+            })
+        } catch (error) {
+            callbacks.onError(error instanceof Error ? error : new Error(String(error)))
+            return
         }
     }
 
-    return { messages: response_messages }
+    callbacks.onDone()
 }
