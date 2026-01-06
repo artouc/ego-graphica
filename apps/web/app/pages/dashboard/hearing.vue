@@ -36,6 +36,10 @@ async function handleSend() {
             `${config.public.apiUrl}/api/hearing`,
             {
                 method: "POST",
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": auth.bucket.value
+                },
                 body: {
                     bucket: auth.bucket.value,
                     message: user_message,

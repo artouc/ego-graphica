@@ -120,6 +120,14 @@ types:
         type: string[]
         required: true
         description: 避けるべきトピック
+      writing_style:
+        type: WritingStyle
+        required: false
+        description: 文体分析結果（自動生成）
+      style_samples:
+        type: string[]
+        required: false
+        description: 実際のテキストから抽出したサンプル文
 
   SampleResponse:
     description: 理想的な応答例
@@ -136,6 +144,62 @@ types:
         type: string
         required: true
         description: 理想的な応答
+
+  PunctuationStyle:
+    description: 句読点スタイル
+    fields:
+      uses_exclamation:
+        type: boolean
+        required: true
+        description: 感嘆符を使用するか
+      uses_question_marks:
+        type: boolean
+        required: true
+        description: 疑問符を多用するか
+      uses_emoji:
+        type: boolean
+        required: true
+        description: 絵文字を使用するか
+      period_style:
+        type: string
+        required: true
+        description: 句点スタイル（"。" | "." | "none"）
+      comma_style:
+        type: string
+        required: true
+        description: 読点スタイル（"、" | ","）
+
+  WritingStyle:
+    description: 文体分析結果
+    fields:
+      sentence_endings:
+        type: string[]
+        required: true
+        description: 文末表現パターン（例：["です", "ます", "である"]）
+      punctuation:
+        type: PunctuationStyle
+        required: true
+        description: 句読点スタイル
+      formality_level:
+        type: number
+        required: true
+        description: フォーマル度（0.0-1.0、1.0が最もフォーマル）
+      characteristic_phrases:
+        type: string[]
+        required: true
+        description: 特徴的なフレーズ
+      avoid_patterns:
+        type: string[]
+        required: true
+        description: 避けるべきパターン
+      sentence_length:
+        type: string
+        required: true
+        description: 一文の平均的な長さ（"short" | "medium" | "long"）
+      description:
+        type: string
+        required: true
+        description: 文体の総合的な説明
 
   # ----------------------------------------------------------------------------
   # Work（作品データ）
@@ -306,6 +370,10 @@ types:
         type: string
         required: true
         description: 本文
+      text_url:
+        type: string
+        required: false
+        description: Firebase Storage URL（/{bucket}/data/{urlId}/url.txt）
       scraped:
         type: Timestamp
         required: true
@@ -534,12 +602,16 @@ storage:
           - png
           - mp4
       - path: /{bucket}/data/{fileId}/
-        description: 処理済みデータ
+        description: 処理済みデータ（ファイル）
         files:
           - pdf.txt: 全文テキスト（PDF）
           - pdf-{n}.png: 埋め込み画像（PDF）
           - audio.txt: 文字起こし（音声）
           - image.json: Claude Vision解析結果（画像）
+      - path: /{bucket}/data/{urlId}/
+        description: 処理済みデータ（URL）
+        files:
+          - url.txt: スクレイピング結果テキスト
 
 # ==============================================================================
 # Firestore Collection Structure

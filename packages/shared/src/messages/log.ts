@@ -41,6 +41,7 @@ export const LOG = {
         FILE_PROCESSED: "ファイルの処理が完了しました",
         URL_SCRAPING: "URLをスクレイピングしています...",
         URL_SCRAPED: "URLのスクレイピングが完了しました",
+        READABILITY_FALLBACK: "Readabilityで本文抽出できないためフォールバック処理を実行",
         EMBEDDING_GENERATING: "Embeddingを生成しています...",
         EMBEDDING_GENERATED: "Embeddingの生成が完了しました",
         VECTOR_UPSERTING: "ベクトルをUpsertしています...",
@@ -56,7 +57,11 @@ export const LOG = {
         AUDIO_TRANSCRIBING: "音声を文字起こししています...",
         AUDIO_TRANSCRIBED: "音声の文字起こしが完了しました",
         CHAT_GENERATING: "応答を生成しています...",
-        CHAT_GENERATED: "応答の生成が完了しました"
+        CHAT_GENERATED: "応答の生成が完了しました",
+        STYLE_ANALYZING: "文体を分析しています...",
+        STYLE_ANALYZED: "文体の分析が完了しました",
+        STYLE_SAMPLES_EXTRACTING: "サンプル文を抽出しています...",
+        STYLE_SAMPLES_EXTRACTED: "サンプル文の抽出が完了しました"
     },
 
     // 作品

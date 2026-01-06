@@ -30,19 +30,65 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
         if (persona.character) {
             prompt += `\nあなたの名前は「${persona.character}」です。`
         }
-        prompt += `\nモチーフ: ${persona.motif}`
-        prompt += `\n話し方: ${getToneDescription(persona.tone)}`
-        prompt += `\n創作哲学: ${persona.philosophy}`
+        if (persona.motif) {
+            prompt += `\nモチーフ: ${persona.motif}`
+        }
+        if (persona.tone) {
+            prompt += `\n話し方: ${getToneDescription(persona.tone)}`
+        }
+        if (persona.philosophy) {
+            prompt += `\n創作哲学: ${persona.philosophy}`
+        }
 
-        if (persona.influences.length > 0) {
+        if (persona.influences && persona.influences.length > 0) {
             prompt += `\n影響を受けた作家・文化: ${persona.influences.join("、")}`
         }
 
-        if (persona.avoidances.length > 0) {
+        // 文体スタイル（重要：これに厳密に従う）
+        if (persona.writing_style) {
+            const style = persona.writing_style
+            prompt += `\n\n## 文体スタイル（厳守）`
+            prompt += `\n${style.description}`
+            prompt += `\n\n### 文末表現`
+            prompt += `\n使用する文末: ${style.sentence_endings.join("、")}`
+            prompt += `\n\n### 句読点ルール`
+            if (!style.punctuation.uses_exclamation) {
+                prompt += `\n- 感嘆符（！）は使用しない`
+            }
+            if (!style.punctuation.uses_emoji) {
+                prompt += `\n- 絵文字は使用しない`
+            }
+            if (!style.punctuation.uses_question_marks) {
+                prompt += `\n- 疑問符（？）の多用は避ける`
+            }
+            prompt += `\n- 句点: ${style.punctuation.period_style}`
+            prompt += `\n- 読点: ${style.punctuation.comma_style}`
+            prompt += `\n\n### フォーマル度: ${Math.round(style.formality_level * 100)}%`
+
+            if (style.characteristic_phrases.length > 0) {
+                prompt += `\n\n### 特徴的な表現`
+                prompt += `\n${style.characteristic_phrases.join("、")}`
+            }
+
+            if (style.avoid_patterns.length > 0) {
+                prompt += `\n\n### 絶対に使用しない表現`
+                prompt += `\n${style.avoid_patterns.join("、")}`
+            }
+        }
+
+        // サンプル文（実際のアーティストの文章）
+        if (persona.style_samples && persona.style_samples.length > 0) {
+            prompt += `\n\n## アーティスト本人の文章例（この文体を模倣）`
+            for (const sample of persona.style_samples) {
+                prompt += `\n「${sample}」`
+            }
+        }
+
+        if (persona.avoidances && persona.avoidances.length > 0) {
             prompt += `\n\n## 避けるべきトピック\n${persona.avoidances.join("、")}についての話題は避けてください。`
         }
 
-        if (persona.samples.length > 0) {
+        if (persona.samples && persona.samples.length > 0) {
             prompt += `\n\n## 応答例`
             for (const sample of persona.samples) {
                 prompt += `\n\n状況: ${sample.situation}`
@@ -59,7 +105,8 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
     prompt += `\n\n## 注意事項
 - 顧客に対して丁寧に、でもアーティストらしい個性を持って対応してください
 - 作品について聞かれた場合は、参考情報を元に具体的に説明してください
-- わからないことは正直に「確認します」と伝えてください`
+- わからないことは正直に「確認します」と伝えてください
+- 文体スタイルの指定がある場合は、それに厳密に従ってください（特に絵文字・感嘆符の使用禁止）`
 
     return prompt
 }

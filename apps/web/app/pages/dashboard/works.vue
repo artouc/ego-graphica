@@ -39,7 +39,13 @@ async function fetchWorks() {
     is_fetching.value = true
     try {
         const response = await $fetch<{ data: { works: Work[] } }>(
-            `${config.public.apiUrl}/api/works?bucket=${auth.bucket.value}`
+            `${config.public.apiUrl}/api/works?bucket=${auth.bucket.value}`,
+            {
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": auth.bucket.value
+                }
+            }
         )
         works.value = response.data.works
     } catch (e) {
@@ -76,6 +82,10 @@ async function handleSubmit() {
 
         await $fetch(`${config.public.apiUrl}/api/works`, {
             method: "POST",
+            headers: {
+                "X-API-Key": config.public.masterApiKey,
+                "X-Bucket": auth.bucket.value
+            },
             body: formData
         })
 
@@ -110,7 +120,11 @@ async function handleDelete(id: string) {
 
     try {
         await $fetch(`${config.public.apiUrl}/api/works/${id}?bucket=${auth.bucket.value}`, {
-            method: "DELETE"
+            method: "DELETE",
+            headers: {
+                "X-API-Key": config.public.masterApiKey,
+                "X-Bucket": auth.bucket.value
+            }
         })
         await fetchWorks()
     } catch (e) {

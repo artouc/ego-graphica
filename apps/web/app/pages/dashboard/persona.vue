@@ -31,7 +31,13 @@ async function fetchPersona() {
     is_fetching.value = true
     try {
         const response = await $fetch<{ data: { persona: any } }>(
-            `${config.public.apiUrl}/api/persona?bucket=${auth.bucket.value}`
+            `${config.public.apiUrl}/api/persona?bucket=${auth.bucket.value}`,
+            {
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": auth.bucket.value
+                }
+            }
         )
 
         if (response.data.persona) {
@@ -74,6 +80,10 @@ async function handleSubmit() {
 
         await $fetch(`${config.public.apiUrl}/api/persona`, {
             method: "PUT",
+            headers: {
+                "X-API-Key": config.public.masterApiKey,
+                "X-Bucket": auth.bucket.value
+            },
             body: {
                 bucket: auth.bucket.value,
                 character: form.value.character || undefined,

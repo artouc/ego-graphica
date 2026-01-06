@@ -23,6 +23,10 @@ async function handleSubmit() {
             `${config.public.apiUrl}/api/ingest/url`,
             {
                 method: "POST",
+                headers: {
+                    "X-API-Key": config.public.masterApiKey,
+                    "X-Bucket": auth.bucket.value
+                },
                 body: {
                     bucket: auth.bucket.value,
                     url: url.value

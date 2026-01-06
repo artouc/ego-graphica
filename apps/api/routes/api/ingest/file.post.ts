@@ -17,9 +17,10 @@ import { generateEmbedding } from "~/utils/openai"
 import { upsertVectors } from "~/utils/pinecone"
 import { analyzeImage, extractPdfContent, transcribeAudio, bufferToBase64 } from "~/utils/ai"
 import { chunkText } from "~/utils/chunking"
+import { analyzeWritingStyle, extractStyleSamples, mergeWritingStyles, mergeStyleSamples } from "~/utils/style-analyzer"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
-import type { VectorMetadata, VectorUpsert } from "@egographica/shared"
+import type { VectorMetadata, VectorUpsert, Persona } from "@egographica/shared"
 
 const ALLOWED_TYPES = {
     "application/pdf": "pdf",
@@ -217,6 +218,50 @@ export default defineEventHandler(async (event: H3Event) => {
         }
     } catch (e) {
         console.error("Embedding/Pinecone failed:", e)
+    }
+
+    // 文体分析（PDF/音声など十分なテキストがある場合）
+    if (extracted_text.length > 500 && (file_ext === "pdf" || file_ext === "mp3" || file_ext === "m4a" || file_ext === "wav")) {
+        try {
+            console.log("Starting writing style analysis...")
+
+            // 文体分析とサンプル抽出を並行実行
+            const [new_style, new_samples] = await Promise.all([
+                analyzeWritingStyle(extracted_text),
+                extractStyleSamples(extracted_text)
+            ])
+
+            // 既存のペルソナを取得
+            const persona_ref = db.collection(bucket).doc("persona")
+            const persona_doc = await persona_ref.get()
+
+            if (persona_doc.exists) {
+                const existing_persona = persona_doc.data() as Persona
+
+                // 既存の文体情報とマージ
+                const merged_style = mergeWritingStyles(existing_persona.writing_style, new_style)
+                const merged_samples = mergeStyleSamples(existing_persona.style_samples, new_samples)
+
+                // ペルソナを更新
+                await persona_ref.update({
+                    writing_style: merged_style,
+                    style_samples: merged_samples
+                })
+
+                console.log("Writing style merged with existing persona")
+            } else {
+                // ペルソナが存在しない場合は新規作成（最小限のフィールド）
+                await persona_ref.set({
+                    writing_style: new_style,
+                    style_samples: new_samples
+                }, { merge: true })
+
+                console.log("Writing style saved to new persona")
+            }
+        } catch (e) {
+            console.error("Writing style analysis failed:", e)
+            // 文体分析の失敗はファイルアップロード全体を失敗させない
+        }
     }
 
     return success(event, {

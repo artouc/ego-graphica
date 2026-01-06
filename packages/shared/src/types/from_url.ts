@@ -15,6 +15,8 @@ export interface FromUrl {
     title?: string
     /** 本文 */
     content: string
+    /** Firebase Storage URL（/{bucket}/data/{urlId}/url.txt） */
+    text_url?: string
     /** スクレイピング日時 */
     scraped: Timestamp
     /** 登録日時 */
