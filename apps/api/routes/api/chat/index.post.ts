@@ -257,6 +257,18 @@ export default defineEventHandler(async (event: H3Event) => {
     try {
         console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`, { history_count: conversation_history.length })
 
+        // ツールコーリング無効化中
+        const { text } = await generateText({
+            model,
+            system: system_prompt,
+            messages: conversation_history
+            // maxSteps: 3,
+            // tools: { ... } - 下記コメントアウト参照
+        })
+        const toolCalls: unknown[] = []
+        const steps: unknown[] = []
+
+        /* ツールコーリング（一時無効化）
         const { text, toolCalls, steps } = await generateText({
             model,
             system: system_prompt,
@@ -349,6 +361,7 @@ export default defineEventHandler(async (event: H3Event) => {
                 })
             }
         })
+        ツールコーリング（一時無効化）ここまで */
 
         console.log(`${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API response received`)
         console.log("generateText result:", {
