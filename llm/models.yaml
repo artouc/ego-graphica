@@ -52,6 +52,12 @@ enums:
       - user
       - assistant
 
+  AIProvider:
+    description: AIプロバイダー
+    values:
+      - claude  # Anthropic Claude 4.5 Opus
+      - grok    # xAI Grok 4.1 Fast Reasoning
+
 # ==============================================================================
 # Types（型定義）
 # ==============================================================================
@@ -128,6 +134,10 @@ types:
         type: string[]
         required: false
         description: 実際のテキストから抽出したサンプル文
+      provider:
+        type: AIProvider
+        required: false
+        description: AIプロバイダー（claude | grok）
 
   SampleResponse:
     description: 理想的な応答例

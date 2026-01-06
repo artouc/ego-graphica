@@ -59,3 +59,10 @@ export const SourceType = {
     FILE: "file"
 } as const
 export type SourceType = (typeof SourceType)[keyof typeof SourceType]
+
+/** AIプロバイダー */
+export const AIProvider = {
+    CLAUDE: "claude",
+    GROK: "grok"
+} as const
+export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]

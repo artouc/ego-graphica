@@ -40,6 +40,7 @@ export const ERROR = {
         PINECONE_ERROR: "Pineconeサービスでエラーが発生しました",
         OPENAI_ERROR: "OpenAIサービスでエラーが発生しました",
         ANTHROPIC_ERROR: "Anthropicサービスでエラーが発生しました",
+        XAI_ERROR: "xAIサービスでエラーが発生しました",
         SCRAPING_FAILED: "URLのスクレイピングに失敗しました"
     },
 

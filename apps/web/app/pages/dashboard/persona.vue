@@ -17,7 +17,8 @@ const form = ref({
     avoidances: "",
     sample_situation: "",
     sample_message: "",
-    sample_response: ""
+    sample_response: "",
+    provider: "claude"
 })
 
 const is_loading = ref(false)
@@ -48,6 +49,7 @@ async function fetchPersona() {
             form.value.philosophy = p.philosophy || ""
             form.value.influences = (p.influences || []).join(", ")
             form.value.avoidances = (p.avoidances || []).join(", ")
+            form.value.provider = p.provider || "claude"
 
             if (p.samples && p.samples.length > 0) {
                 form.value.sample_situation = p.samples[0].situation || ""
@@ -92,7 +94,8 @@ async function handleSubmit() {
                 philosophy: form.value.philosophy,
                 influences: form.value.influences.split(",").map(s => s.trim()).filter(Boolean),
                 avoidances: form.value.avoidances.split(",").map(s => s.trim()).filter(Boolean),
-                samples
+                samples,
+                provider: form.value.provider
             }
         })
 
@@ -139,6 +142,20 @@ watch(() => auth.bucket.value, (newBucket) => {
                 </UiCardHeader>
                 <UiCardContent>
                     <div class="space-y-4">
+                        <div class="space-y-2">
+                            <UiLabel for="provider">AIプロバイダー</UiLabel>
+                            <select
+                                id="provider"
+                                v-model="form.provider"
+                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                                <option value="claude">Claude 4.5 Opus (Anthropic)</option>
+                                <option value="grok">Grok 4.1 Fast Reasoning (xAI)</option>
+                            </select>
+                        </div>
+
+                        <div class="border-t pt-4"></div>
+
                         <div class="space-y-2">
                             <UiLabel for="character">キャラクター名（任意）</UiLabel>
                             <UiInput

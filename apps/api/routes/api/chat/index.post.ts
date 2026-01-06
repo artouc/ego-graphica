@@ -10,9 +10,10 @@ import { z } from "zod"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { queryVectors } from "~/utils/pinecone"
+import { getGrok } from "~/utils/grok"
 import { getClaudeOpus } from "~/utils/anthropic"
 import { success, validationError, serverError } from "~/utils/response"
-import { LOG, ERROR } from "@egographica/shared"
+import { LOG, ERROR, AIProvider } from "@egographica/shared"
 import type { Persona } from "@egographica/shared"
 
 interface RequestBody {
@@ -184,10 +185,12 @@ export default defineEventHandler(async (event: H3Event) => {
         created: FieldValue.serverTimestamp()
     })
 
-    const model = getClaudeOpus()
+    // プロバイダーに応じてモデルを選択
+    const provider_name = persona?.provider || AIProvider.CLAUDE
+    const model = provider_name === AIProvider.GROK ? getGrok() : getClaudeOpus()
 
     try {
-        console.log("Calling Claude API...")
+        console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`)
 
         const { text, toolCalls } = await generateText({
             model,
@@ -261,7 +264,7 @@ export default defineEventHandler(async (event: H3Event) => {
             }
         })
 
-        console.log("Claude API response received")
+        console.log(`${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API response received`)
 
         const full_response = text
 
@@ -291,6 +294,6 @@ export default defineEventHandler(async (event: H3Event) => {
         })
     } catch (e) {
         console.error("Chat generation failed:", e)
-        serverError(ERROR.SERVICE.ANTHROPIC_ERROR)
+        serverError(provider_name === AIProvider.GROK ? ERROR.SERVICE.XAI_ERROR : ERROR.SERVICE.ANTHROPIC_ERROR)
     }
 })

@@ -6,7 +6,7 @@
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { success, validationError } from "~/utils/response"
-import { ERROR } from "@egographica/shared"
+import { ERROR, AIProvider } from "@egographica/shared"
 import type { Persona, SampleResponse } from "@egographica/shared"
 
 interface RequestBody {
@@ -18,6 +18,7 @@ interface RequestBody {
     influences: string[]
     samples: SampleResponse[]
     avoidances: string[]
+    provider?: string
 }
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -42,6 +43,9 @@ export default defineEventHandler(async (event: H3Event) => {
     }
     if (body.philosophy) {
         persona.philosophy = body.philosophy
+    }
+    if (body.provider && (body.provider === AIProvider.CLAUDE || body.provider === AIProvider.GROK)) {
+        persona.provider = body.provider
     }
 
     await db.collection(body.bucket).doc("persona").set(persona)

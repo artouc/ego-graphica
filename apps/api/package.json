@@ -11,12 +11,13 @@
         "lint": "eslint . --ext .ts"
     },
     "dependencies": {
-        "@ai-sdk/anthropic": "^1.2.0",
-        "@ai-sdk/openai": "^1.2.0",
+        "@ai-sdk/anthropic": "^3.0.7",
+        "@ai-sdk/openai": "^3.0.5",
+        "@ai-sdk/xai": "^3.0.8",
         "@egographica/shared": "*",
         "@mozilla/readability": "^0.6.0",
         "@pinecone-database/pinecone": "^4.1.0",
-        "ai": "^4.1.0",
+        "ai": "^6.0.12",
         "canvas": "^3.2.0",
         "dotenv": "^17.2.3",
         "firebase-admin": "^13.0.0",

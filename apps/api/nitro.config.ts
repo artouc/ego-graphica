@@ -11,6 +11,7 @@ export default defineNitroConfig({
     },
     runtimeConfig: {
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+        xaiApiKey: process.env.XAI_API_KEY,
         openaiApiKey: process.env.OPENAI_API_KEY,
         pineconeApiKey: process.env.PINECONE_API_KEY,
         pineconeIndex: process.env.PINECONE_INDEX,
