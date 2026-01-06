@@ -95,7 +95,7 @@ types:
       character:
         type: string
         required: false
-        description: エージェント名
+        description: キャラクター名
       motif:
         type: string
         required: true
@@ -104,10 +104,6 @@ types:
         type: PersonaTone
         required: true
         description: 話し方のトーン
-      personality:
-        type: string[]
-        required: true
-        description: 性格特性
       philosophy:
         type: string
         required: true
@@ -116,14 +112,6 @@ types:
         type: string[]
         required: true
         description: 影響を受けた作家・文化
-      keywords:
-        type: string[]
-        required: true
-        description: よく使う言葉
-      greeting:
-        type: string
-        required: true
-        description: 挨拶の仕方
       samples:
         type: SampleResponse[]
         required: true
@@ -132,10 +120,6 @@ types:
         type: string[]
         required: true
         description: 避けるべきトピック
-      backstory:
-        type: string
-        required: true
-        description: バックストーリー
 
   SampleResponse:
     description: 理想的な応答例
