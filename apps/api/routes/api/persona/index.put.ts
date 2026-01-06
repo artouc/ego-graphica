@@ -43,7 +43,7 @@ export default defineEventHandler(async (event: H3Event) => {
     if (body.philosophy) {
         persona.philosophy = body.philosophy
     }
-    if (body.provider && body.provider === AIProvider.CLAUDE) {
+    if (body.provider && (body.provider === AIProvider.CLAUDE || body.provider === AIProvider.GPT4O_MINI)) {
         persona.provider = body.provider
     }
 

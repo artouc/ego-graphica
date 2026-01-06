@@ -77,27 +77,21 @@ export async function invalidateCache(
         const redis = getRedisClient()
         const key = REDIS_KEYS.cagContext(bucket)
 
-        if (type === InvalidationType.FULL) {
+        // ペルソナ変更時もフル無効化（Chat APIがpersona=nullを使わないように）
+        if (type === InvalidationType.FULL || type === InvalidationType.PERSONA_ONLY) {
             await redis.del(key)
-            console.log(`CAG cache fully invalidated for bucket: ${bucket}`)
+            console.log(`CAG cache invalidated (${type}) for bucket: ${bucket}`)
             return
         }
 
-        // 部分的な無効化: 既存のデータを取得して更新
+        // RAGサマリーのみの無効化: 既存のデータを取得して更新
         const cached = await redis.get<CachedContext>(key)
         if (!cached) return
 
-        switch (type) {
-            case InvalidationType.PERSONA_ONLY:
-                cached.persona = null
-                await redis.set(key, cached, { ex: REDIS_TTL.CAG_CONTEXT })
-                console.log(`CAG persona cache invalidated for bucket: ${bucket}`)
-                break
-            case InvalidationType.RAG_SUMMARY:
-                cached.rag_summary = ""
-                await redis.set(key, cached, { ex: REDIS_TTL.CAG_CONTEXT })
-                console.log(`CAG RAG summary cache invalidated for bucket: ${bucket}`)
-                break
+        if (type === InvalidationType.RAG_SUMMARY) {
+            cached.rag_summary = ""
+            await redis.set(key, cached, { ex: REDIS_TTL.CAG_CONTEXT })
+            console.log(`CAG RAG summary cache invalidated for bucket: ${bucket}`)
         }
     } catch (e) {
         console.error("CAG cache invalidate failed:", e)

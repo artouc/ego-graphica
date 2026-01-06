@@ -6,6 +6,7 @@ definePageMeta({
 })
 
 interface DebugInfo {
+    provider: string
     timings: Record<string, number>
     cache_hits: {
         cag: boolean
@@ -187,6 +188,16 @@ async function handleSend() {
                     会話を開始すると参照データが表示されます
                 </div>
                 <div v-else class="text-xs font-mono">
+                    <!-- AI Provider -->
+                    <div class="border-b">
+                        <div class="px-3 py-2 bg-muted/50 flex items-center justify-between">
+                            <span class="font-semibold">AI Provider</span>
+                            <span :class="debug_info.provider === 'gpt-4o-mini' ? 'text-emerald-600 dark:text-emerald-400' : 'text-orange-600 dark:text-orange-400'">
+                                {{ debug_info.provider === 'gpt-4o-mini' ? 'GPT-4o-mini (OpenAI)' : 'Claude Opus (Anthropic)' }}
+                            </span>
+                        </div>
+                    </div>
+
                     <!-- Redis Cache Status -->
                     <div class="border-b">
                         <div class="bg-red-500/10 px-3 py-1.5 font-semibold text-red-600 dark:text-red-400 flex items-center justify-between">

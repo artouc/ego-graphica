@@ -25,6 +25,7 @@
         "h3": "^1.15.0",
         "linkedom": "^0.18.12",
         "nitropack": "^2.10.0",
+        "openai": "^6.15.0",
         "pdfjs-dist": "^5.4.530",
         "zod": "^3.24.0",
         "zod-to-json-schema": "^3.25.1"

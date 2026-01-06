@@ -1,15 +1,17 @@
 /**
- * ego Graphica - OpenAI Embedding
+ * ego Graphica - OpenAI Embedding & Chat
  */
 
 import { createOpenAI } from "@ai-sdk/openai"
 import { embed } from "ai"
+import OpenAI from "openai"
 import { LOG } from "@egographica/shared"
 import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache"
 
 let openai_client: ReturnType<typeof createOpenAI> | null = null
+let openai_sdk_client: OpenAI | null = null
 
-/** OpenAI クライアントを取得 */
+/** OpenAI クライアントを取得（AI SDK用） */
 export function getOpenAIClient(): ReturnType<typeof createOpenAI> {
     if (openai_client) {
         return openai_client
@@ -22,6 +24,27 @@ export function getOpenAIClient(): ReturnType<typeof createOpenAI> {
     })
 
     return openai_client
+}
+
+/** OpenAI SDKクライアントを取得（直接API呼び出し用） */
+export function getOpenAISDKClient(): OpenAI {
+    if (openai_sdk_client) {
+        return openai_sdk_client
+    }
+
+    const config = useRuntimeConfig()
+
+    openai_sdk_client = new OpenAI({
+        apiKey: config.openaiApiKey
+    })
+
+    return openai_sdk_client
+}
+
+/** GPT-4o-mini モデルを取得 */
+export function getGPT4oMini() {
+    const openai = getOpenAIClient()
+    return openai("gpt-4o-mini")
 }
 
 /** テキストをEmbeddingに変換（キャッシュ対応） */

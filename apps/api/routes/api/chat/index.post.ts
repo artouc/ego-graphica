@@ -6,15 +6,17 @@
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { FieldValue } from "firebase-admin/firestore"
 import { getFirestoreInstance } from "~/utils/firebase"
-import { generateEmbedding } from "~/utils/openai"
+import { generateEmbedding, getOpenAISDKClient } from "~/utils/openai"
 import { queryVectors } from "~/utils/pinecone"
 import { getAnthropicSDKClient } from "~/utils/anthropic"
 import { getCache, setCache, buildRagSummary } from "~/utils/cag"
 import { getCachedSessionHistory, setSessionCache, appendToSessionCache } from "~/utils/session-cache"
 import { getCachedVectorResults, setVectorCache } from "~/utils/vector-cache"
 import { estimateTokens, truncateToTokenLimit, getContextTokenBudget } from "~/utils/token-counter"
+import { runClaudeConversation, runOpenAIConversation } from "~/utils/chat-tools"
+import type { ConversationMessage } from "~/utils/chat-tools"
 import { success, validationError, serverError } from "~/utils/response"
-import { LOG, ERROR } from "@egographica/shared"
+import { LOG, ERROR, AIProvider } from "@egographica/shared"
 import type { Persona } from "@egographica/shared"
 
 interface RequestBody {
@@ -108,16 +110,23 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
         prompt += `\n\n## 参考情報（RAG）\n以下の情報を参考にして回答してください:\n\n${context}`
     }
 
-    prompt += `\n\n## 応答スタイル（最重要）
-- **超短文**: 1文、長くても2文まで。人間のチャットのように短く。
+    prompt += `\n\n## 応答方法（必須）
+**重要**: 必ず sendMessage ツールを使って応答してください。直接テキストを返さないでください。
+
+sendMessage ツールの使い方:
+- message: 顧客に送るメッセージ（1-2文の短文）
+- have_more_to_say: まだ伝えたいことがあれば true、十分なら false
+- next_topic: 次に話す内容（なければ「なし」）
+
+## 応答スタイル
+- **超短文**: 1文、長くても2文まで
 - **自然な会話**: 「〜ですね」「〜かな」のような口語的な終わり方
-- **自己評価**: 回答後、shouldKeepTalking を呼んで足りなければ追加メッセージを送る
-- **分割して話す**: 長くなりそうなら複数メッセージに分ける
+- **分割**: 長くなりそうなら複数回 sendMessage を呼ぶ
 
 ## 注意事項
-- 顧客に対して丁寧に、でもアーティストらしい個性を持って対応してください
-- 作品について聞かれた場合は、参考情報を元に具体的に説明してください
-- わからないことは正直に「確認します」と伝えてください`
+- 顧客に対して丁寧に、でもアーティストらしい個性を持って対応
+- 作品について聞かれた場合は参考情報を元に具体的に説明
+- わからないことは正直に「確認します」と伝える`
 
     return prompt
 }
@@ -245,13 +254,13 @@ export default defineEventHandler(async (event: H3Event) => {
 
     // 過去の会話履歴を取得（Redisキャッシュ優先）
     const history_start = Date.now()
-    let conversation_history: Array<{ role: "user" | "assistant"; content: string }> = []
+    let conversation_history: ConversationMessage[] = []
     const cached_history = await getCachedSessionHistory(session_id)
 
     if (cached_history) {
         console.log("Session cache HIT (Redis)")
         cache_hits.session = true
-        conversation_history = cached_history as Array<{ role: "user" | "assistant"; content: string }>
+        conversation_history = cached_history as ConversationMessage[]
     } else {
         console.log("Session cache MISS - loading from Firestore")
         const history_snapshot = await messages_ref.orderBy("created", "asc").limit(20).get()
@@ -298,125 +307,31 @@ export default defineEventHandler(async (event: H3Event) => {
         created: FieldValue.serverTimestamp()
     })
 
+    // プロバイダーを決定（デフォルト: Claude）
+    const provider = persona?.provider || AIProvider.CLAUDE
+    console.log("Using AI provider:", provider)
+
     try {
-        console.log("Calling Claude API...", { history_count: conversation_history.length })
-
-        // Anthropic SDKを直接使用（AI SDKのバグを回避）
-        const anthropic = getAnthropicSDKClient()
-        
-        // ツール定義（Anthropic SDK形式）
-        const tools = [
-            {
-                name: "shouldKeepTalking",
-                description: "回答の後に必ず呼び出す。追加で話すべき内容があるか評価する。",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        have_more_to_say: {
-                            type: "boolean",
-                            description: "まだ伝えたいことがあるならtrue、十分ならfalse"
-                        },
-                        next_topic: {
-                            type: "string",
-                            description: "次に話す内容、または「なし」"
-                        }
-                    },
-                    required: ["have_more_to_say", "next_topic"]
-                }
-            }
-        ]
-
         const ai_start = Date.now()
-        
-        // Anthropic SDKを使用してAPI呼び出し
-        const response_messages: string[] = []
-        let current_messages = conversation_history.map(msg => ({
-            role: msg.role as "user" | "assistant",
-            content: msg.content
-        }))
-        
-        // maxStepsの代わりに手動でループ（最大5回）
-        let shouldContinue = true
-        for (let step = 0; step < 5 && shouldContinue; step++) {
-            const response = await anthropic.messages.create({
-                model: "claude-opus-4-5",
-                max_tokens: 350,
-                system: system_prompt,
-                messages: current_messages,
-                tools: step === 0 ? tools : undefined // 最初のステップのみツールを提供
-            })
-            
-            // アシスタントの応答全体をメッセージに追加（テキストとtool_useの両方を含む）
-            const assistantContent: Array<{ type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown }> = []
-            
-            // テキストを追加
-            for (const content of response.content) {
-                if (content.type === "text") {
-                    response_messages.push(content.text)
-                    assistantContent.push({
-                        type: "text",
-                        text: content.text
-                    })
-                } else if (content.type === "tool_use") {
-                    assistantContent.push({
-                        type: "tool_use",
-                        id: content.id,
-                        name: content.name,
-                        input: content.input
-                    })
-                }
-            }
-            
-            // アシスタントの応答をメッセージ履歴に追加
-            current_messages.push({
-                role: "assistant",
-                content: assistantContent
-            })
-            
-            // ツール呼び出しを処理
-            const toolUseBlocks = response.content.filter((c): c is { type: "tool_use"; id: string; name: string; input: unknown } => c.type === "tool_use")
-            
-            if (toolUseBlocks.length === 0) {
-                shouldContinue = false // ツール呼び出しがない場合は終了
-                break
-            }
-            
-            // ツール実行結果を追加
-            const toolResults = []
-            for (const toolUse of toolUseBlocks) {
-                if (toolUse.name === "shouldKeepTalking") {
-                    const { have_more_to_say, next_topic } = toolUse.input as { have_more_to_say: boolean; next_topic: string }
-                    console.log("shouldKeepTalking:", { have_more_to_say, next_topic })
-                    
-                    if (!have_more_to_say) {
-                        // 続ける必要がない場合は終了
-                        shouldContinue = false
-                        break
-                    }
-                    
-                    toolResults.push({
-                        type: "tool_result" as const,
-                        tool_use_id: toolUse.id,
-                        content: JSON.stringify({ continue: true, topic: next_topic })
-                    })
-                }
-            }
-            
-            if (toolResults.length === 0 || !shouldContinue) {
-                shouldContinue = false // ツール実行結果がない場合は終了
-                break
-            }
-            
-            // ツール実行結果をメッセージに追加
-            current_messages.push({
-                role: "user",
-                content: toolResults
-            })
+        let response_messages: string[] = []
+
+        console.log(`Calling ${provider} API...`, { history_count: conversation_history.length })
+
+        if (provider === AIProvider.GPT4O_MINI) {
+            // GPT-4o-mini を使用
+            const openai = getOpenAISDKClient()
+            const result = await runOpenAIConversation(openai, system_prompt, conversation_history)
+            response_messages = result.messages
+        } else {
+            // Claude を使用（デフォルト）
+            const anthropic = getAnthropicSDKClient()
+            const result = await runClaudeConversation(anthropic, system_prompt, conversation_history)
+            response_messages = result.messages
         }
-        
+
         timings.ai_call = Date.now() - ai_start
 
-        console.log("Claude API response received")
+        console.log(`${provider} API response received`)
         console.log("Response:", {
             messages_count: response_messages.length,
             messages_preview: response_messages.map(m => m.slice(0, 100))
@@ -465,6 +380,7 @@ export default defineEventHandler(async (event: H3Event) => {
             session_id,
             messages: response_messages, // 複数メッセージを配列で返す
             _debug: {
+                provider,
                 timings,
                 cache_hits,
                 rag: realtime_context || "(スキップ)",
@@ -481,6 +397,6 @@ export default defineEventHandler(async (event: H3Event) => {
         })
     } catch (e) {
         console.error("Chat generation failed:", e)
-        serverError(ERROR.SERVICE.ANTHROPIC_ERROR)
+        serverError(ERROR.SERVICE.AI_PROVIDER_ERROR)
     }
 })

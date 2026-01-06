@@ -11,7 +11,6 @@ const auth = useAuth()
 const form = ref({
     character: "",
     motif: "",
-    tone: "friendly",
     philosophy: "",
     influences: "",
     avoidances: "",
@@ -45,7 +44,6 @@ async function fetchPersona() {
             const p = response.data.persona
             form.value.character = p.character || ""
             form.value.motif = p.motif || ""
-            form.value.tone = p.tone || "friendly"
             form.value.philosophy = p.philosophy || ""
             form.value.influences = (p.influences || []).join(", ")
             form.value.avoidances = (p.avoidances || []).join(", ")
@@ -90,7 +88,6 @@ async function handleSubmit() {
                 bucket: auth.bucket.value,
                 character: form.value.character || undefined,
                 motif: form.value.motif,
-                tone: form.value.tone,
                 philosophy: form.value.philosophy,
                 influences: form.value.influences.split(",").map(s => s.trim()).filter(Boolean),
                 avoidances: form.value.avoidances.split(",").map(s => s.trim()).filter(Boolean),
@@ -149,9 +146,12 @@ watch(() => auth.bucket.value, (newBucket) => {
                                 v-model="form.provider"
                                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             >
-                                <option value="claude">Claude 4.5 Opus (Anthropic)</option>
-                                <option value="grok">Grok 4.1 Fast Reasoning (xAI)</option>
+                                <option value="claude">Claude Opus 4.5 (高品質・Tool Calling対応)</option>
+                                <option value="gpt-4o-mini">GPT-4o-mini (高速・低コスト)</option>
                             </select>
+                            <p class="text-xs text-muted-foreground">
+                                Claude Opus: 高品質な応答。GPT-4o-mini: 高速応答・低コスト。どちらもTool Calling対応。
+                            </p>
                         </div>
 
                         <div class="border-t pt-4"></div>
@@ -172,21 +172,6 @@ watch(() => auth.bucket.value, (newBucket) => {
                                 v-model="form.motif"
                                 placeholder="例: カエル、猫、宇宙人"
                             />
-                        </div>
-
-                        <div class="space-y-2">
-                            <UiLabel for="tone">話し方のトーン</UiLabel>
-                            <select
-                                id="tone"
-                                v-model="form.tone"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            >
-                                <option value="formal">丁寧・フォーマル</option>
-                                <option value="friendly">フレンドリー</option>
-                                <option value="artistic">芸術的・詩的</option>
-                                <option value="professional">プロフェッショナル</option>
-                                <option value="playful">遊び心のある</option>
-                            </select>
                         </div>
 
                         <div class="space-y-2">

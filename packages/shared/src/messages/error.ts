@@ -41,6 +41,7 @@ export const ERROR = {
         OPENAI_ERROR: "OpenAIサービスでエラーが発生しました",
         ANTHROPIC_ERROR: "Anthropicサービスでエラーが発生しました",
         XAI_ERROR: "xAIサービスでエラーが発生しました",
+        AI_PROVIDER_ERROR: "AIプロバイダーでエラーが発生しました",
         SCRAPING_FAILED: "URLのスクレイピングに失敗しました"
     },
 
