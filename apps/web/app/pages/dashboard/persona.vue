@@ -63,7 +63,7 @@ async function fetchPersona() {
 }
 
 async function handleSubmit() {
-    if (!form.value.motif || !form.value.philosophy || !auth.bucket.value) return
+    if (!form.value.motif || !auth.bucket.value) return
 
     is_loading.value = true
     message.value = ""
@@ -240,7 +240,7 @@ watch(() => auth.bucket.value, (newBucket) => {
 
                         <UiButton
                             @click="handleSubmit"
-                            :disabled="!form.motif || !form.philosophy || is_loading || !auth.is_configured.value"
+                            :disabled="!form.motif || is_loading || !auth.is_configured.value"
                             :loading="is_loading"
                         >
                             保存

@@ -23,7 +23,7 @@ export const personaSchema = z.object({
         PersonaTone.PROFESSIONAL,
         PersonaTone.PLAYFUL
     ]),
-    philosophy: z.string().min(1, "創作哲学を入力してください"),
+    philosophy: z.string().optional(),
     influences: z.array(z.string()).min(1, "少なくとも1つの影響を受けた作家・文化を入力してください"),
     samples: z.array(sampleResponseSchema).min(1, "少なくとも1つの応答例を入力してください"),
     avoidances: z.array(z.string())

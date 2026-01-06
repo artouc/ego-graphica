@@ -106,7 +106,7 @@ types:
         description: 話し方のトーン
       philosophy:
         type: string
-        required: true
+        required: false
         description: 創作哲学
       influences:
         type: string[]
