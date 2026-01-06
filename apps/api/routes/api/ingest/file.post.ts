@@ -18,6 +18,7 @@ import { upsertVectors } from "~/utils/pinecone"
 import { analyzeImage, extractPdfContent, transcribeAudio, bufferToBase64 } from "~/utils/ai"
 import { chunkText } from "~/utils/chunking"
 import { analyzeWritingStyle, extractStyleSamples, mergeWritingStyles, mergeStyleSamples } from "~/utils/style-analyzer"
+import { invalidateCache } from "~/utils/cag"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
 import type { VectorMetadata, VectorUpsert, Persona } from "@egographica/shared"
@@ -263,6 +264,9 @@ export default defineEventHandler(async (event: H3Event) => {
             // 文体分析の失敗はファイルアップロード全体を失敗させない
         }
     }
+
+    // CAGキャッシュを無効化
+    invalidateCache(bucket)
 
     return success(event, {
         id: file_id,

@@ -37,6 +37,7 @@ export default defineEventHandler(async (event: H3Event) => {
             client: data.client,
             status: data.status,
             description: data.description,
+            story: data.story,
             analysis: data.analysis,
             created: data.created?.toDate?.()?.toISOString() || null
         }

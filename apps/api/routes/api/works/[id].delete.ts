@@ -6,6 +6,7 @@
 import { defineEventHandler, getQuery, H3Event } from "h3"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { deleteVectors } from "~/utils/pinecone"
+import { invalidateCache } from "~/utils/cag"
 import { success, validationError, notFound } from "~/utils/response"
 import { LOG, ERROR } from "@egographica/shared"
 
@@ -43,6 +44,9 @@ export default defineEventHandler(async (event: H3Event) => {
     }
 
     console.log(LOG.WORK.DELETED, { id })
+
+    // CAGキャッシュを無効化
+    invalidateCache(bucket)
 
     return success(event, { deleted: true })
 })

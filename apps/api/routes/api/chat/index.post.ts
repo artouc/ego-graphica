@@ -12,6 +12,7 @@ import { generateEmbedding } from "~/utils/openai"
 import { queryVectors } from "~/utils/pinecone"
 import { getGrok } from "~/utils/grok"
 import { getClaudeOpus } from "~/utils/anthropic"
+import { getCache, setCache, buildRagSummary } from "~/utils/cag"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, AIProvider } from "@egographica/shared"
 import type { Persona } from "@egographica/shared"
@@ -154,28 +155,56 @@ export default defineEventHandler(async (event: H3Event) => {
 
     const db = getFirestoreInstance()
 
+    // CAG: キャッシュからペルソナとRAGサマリーを取得
     let persona: Persona | null = null
-    try {
-        const persona_doc = await db.collection(body.bucket).doc("persona").get()
-        if (persona_doc.exists) {
-            persona = persona_doc.data() as Persona
+    let rag_summary = ""
+    const cached = getCache(body.bucket)
+
+    if (cached) {
+        console.log("CAG: Using cached context")
+        persona = cached.persona
+        rag_summary = cached.rag_summary
+    } else {
+        console.log("CAG: Building and caching context")
+        // ペルソナを取得
+        try {
+            const persona_doc = await db.collection(body.bucket).doc("persona").get()
+            if (persona_doc.exists) {
+                persona = persona_doc.data() as Persona
+            }
+        } catch (e) {
+            console.error("Failed to load persona:", e)
         }
-    } catch (e) {
-        console.error("Failed to load persona:", e)
+
+        // RAGサマリーを構築
+        rag_summary = await buildRagSummary(db, body.bucket)
+
+        // キャッシュに保存
+        setCache(body.bucket, persona, rag_summary)
     }
 
-    let context = ""
+    // リアルタイムRAG: クエリに関連するコンテンツを検索
+    let realtime_context = ""
     try {
         const query_embedding = await generateEmbedding(body.message)
         const results = await queryVectors(body.bucket, query_embedding, 5)
 
         if (results.length > 0) {
-            context = results
+            realtime_context = results
                 .map((r, i) => `[${i + 1}] ${r.metadata.title}\n${r.metadata.text}`)
                 .join("\n\n")
         }
     } catch (e) {
         console.error("RAG search failed:", e)
+    }
+
+    // CAGサマリー + リアルタイムRAGを結合
+    let context = ""
+    if (rag_summary) {
+        context += `### 知識ベース（CAG）\n${rag_summary}\n\n`
+    }
+    if (realtime_context) {
+        context += `### 関連情報（RAG）\n${realtime_context}`
     }
 
     const system_prompt = buildSystemPrompt(persona, context)

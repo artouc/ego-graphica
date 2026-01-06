@@ -18,6 +18,7 @@ import { getFirestoreInstance, getStorageInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { upsertVectors } from "~/utils/pinecone"
 import { chunkText } from "~/utils/chunking"
+import { invalidateCache } from "~/utils/cag"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
 import type { VectorMetadata, VectorUpsert } from "@egographica/shared"
@@ -191,6 +192,9 @@ export default defineEventHandler(async (event: H3Event) => {
     } catch (e) {
         console.error("Embedding/Pinecone failed:", e)
     }
+
+    // CAGキャッシュを無効化
+    invalidateCache(body.bucket)
 
     return success(event, {
         id: url_id,

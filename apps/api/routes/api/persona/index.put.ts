@@ -5,6 +5,7 @@
 
 import { defineEventHandler, readBody, H3Event } from "h3"
 import { getFirestoreInstance } from "~/utils/firebase"
+import { invalidateCache } from "~/utils/cag"
 import { success, validationError } from "~/utils/response"
 import { ERROR, AIProvider } from "@egographica/shared"
 import type { Persona, SampleResponse } from "@egographica/shared"
@@ -49,6 +50,9 @@ export default defineEventHandler(async (event: H3Event) => {
     }
 
     await db.collection(body.bucket).doc("persona").set(persona)
+
+    // CAGキャッシュを無効化
+    invalidateCache(body.bucket)
 
     return success(event, { persona })
 })
