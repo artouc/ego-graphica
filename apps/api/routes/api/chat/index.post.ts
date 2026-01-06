@@ -22,6 +22,26 @@ interface RequestBody {
     session_id?: string
 }
 
+/** オブジェクトからundefined値を再帰的に除去（Firestore互換） */
+function stripUndefined<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+        return obj
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(item => stripUndefined(item)) as T
+    }
+    if (typeof obj === "object") {
+        const result: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(obj)) {
+            if (value !== undefined) {
+                result[key] = stripUndefined(value)
+            }
+        }
+        return result as T
+    }
+    return obj
+}
+
 /** ペルソナからシステムプロンプトを生成（CAG） */
 function buildSystemPrompt(persona: Persona | null, context: string): string {
     let prompt = `あなたはアーティストの代わりに顧客対応を行うAIエージェント「ego Graphica」です。`
@@ -192,12 +212,13 @@ export default defineEventHandler(async (event: H3Event) => {
     try {
         console.log(`Calling ${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API...`)
 
-        const { text, toolCalls } = await generateText({
+        const { text, toolCalls, steps } = await generateText({
             model,
             system: system_prompt,
             messages: [
                 { role: "user", content: body.message }
             ],
+            maxSteps: 3,
             tools: {
                 showPortfolio: tool({
                     description: "作品ポートフォリオを表示する",
@@ -206,6 +227,8 @@ export default defineEventHandler(async (event: H3Event) => {
                         limit: z.number().optional().describe("表示件数")
                     }),
                     execute: async ({ category, limit = 6 }) => {
+                        console.log("showPortfolio called:", { bucket: body.bucket, category, limit })
+
                         const works_snapshot = await db
                             .collection(body.bucket)
                             .doc("works")
@@ -214,12 +237,22 @@ export default defineEventHandler(async (event: H3Event) => {
                             .limit(limit)
                             .get()
 
-                        const works = works_snapshot.docs.map(doc => ({
-                            id: doc.data().id,
-                            title: doc.data().title,
-                            url: doc.data().url,
-                            status: doc.data().status
-                        }))
+                        console.log("showPortfolio query result:", {
+                            path: `${body.bucket}/works/items`,
+                            docs_count: works_snapshot.docs.length,
+                            empty: works_snapshot.empty
+                        })
+
+                        const works = works_snapshot.docs.map(doc => {
+                            const data = doc.data()
+                            console.log("Work doc:", { doc_id: doc.id, data_id: data.id, title: data.title })
+                            return {
+                                id: data.id,
+                                title: data.title,
+                                url: data.url,
+                                status: data.status
+                            }
+                        })
 
                         return { works, total: works.length }
                     }
@@ -265,13 +298,74 @@ export default defineEventHandler(async (event: H3Event) => {
         })
 
         console.log(`${provider_name === AIProvider.GROK ? "Grok" : "Claude"} API response received`)
+        console.log("generateText result:", {
+            text_length: text?.length || 0,
+            text_preview: text?.slice(0, 200) || "(empty)",
+            toolCalls_count: toolCalls?.length || 0,
+            steps_count: steps?.length || 0
+        })
+        // stepsの詳細をログ
+        if (steps && steps.length > 0) {
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i]
+                console.log(`Step ${i}:`, {
+                    text: step.text?.slice(0, 100) || "(empty)",
+                    toolCalls: step.toolCalls?.length || 0,
+                    toolResults: step.toolResults?.length || 0,
+                    toolResultsData: step.toolResults ? JSON.stringify(step.toolResults, null, 2).slice(0, 500) : null
+                })
+            }
+        }
 
-        const full_response = text
+        // テキストが空でツール結果がある場合、ツール結果を元にレスポンスを構築
+        let full_response = text
+        if (!text && steps && steps.length > 0) {
+            const tool_results: string[] = []
+            for (const step of steps) {
+                if (step.toolResults && step.toolResults.length > 0) {
+                    for (const tr of step.toolResults) {
+                        // Vercel AI SDK v6では結果は `output` に入る
+                        const output = (tr as { output?: unknown }).output
+                        if (tr.toolName === "showPortfolio" && output) {
+                            const portfolio = output as { works: Array<{ title: string; status: string; url: string }>; total: number }
+                            if (portfolio.works && portfolio.works.length > 0) {
+                                tool_results.push(`作品一覧（${portfolio.total}件）:`)
+                                for (const work of portfolio.works) {
+                                    tool_results.push(`- ${work.title}${work.status === "sold" ? "（売約済み）" : ""}`)
+                                }
+                            } else {
+                                tool_results.push("現在登録されている作品はありません。")
+                            }
+                        } else if (tr.toolName === "searchWorks" && output) {
+                            const search = output as { works: Array<{ title: string; score: number }> }
+                            if (search.works && search.works.length > 0) {
+                                tool_results.push("検索結果:")
+                                for (const work of search.works) {
+                                    tool_results.push(`- ${work.title}`)
+                                }
+                            } else {
+                                tool_results.push("該当する作品が見つかりませんでした。")
+                            }
+                        } else if (tr.toolName === "generateQuote" && output) {
+                            const quote = output as { project_type: string; description: string; note: string }
+                            tool_results.push(`お見積りのご依頼ありがとうございます。`)
+                            tool_results.push(`プロジェクト: ${quote.project_type}`)
+                            tool_results.push(`${quote.note}`)
+                        }
+                    }
+                }
+            }
+            if (tool_results.length > 0) {
+                full_response = tool_results.join("\n")
+            }
+        }
+
+        const cleaned_tool_calls = toolCalls && toolCalls.length > 0 ? stripUndefined(toolCalls) : null
 
         await messages_ref.add({
             role: "assistant",
             content: full_response,
-            tools: toolCalls || null,
+            tools: cleaned_tool_calls,
             created: FieldValue.serverTimestamp()
         })
 
@@ -290,7 +384,7 @@ export default defineEventHandler(async (event: H3Event) => {
         return success(event, {
             session_id,
             message: full_response,
-            tools: toolCalls || []
+            tools: cleaned_tool_calls || []
         })
     } catch (e) {
         console.error("Chat generation failed:", e)
