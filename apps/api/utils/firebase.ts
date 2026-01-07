@@ -29,7 +29,7 @@ export function initializeFirebase(): App {
 
     const config = useRuntimeConfig()
 
-    const private_key = config.firebasePrivateKey?.replace(/\\n/g, "\n")
+    const private_key = Buffer.from(config.firebasePrivateKeyBase64 as string, "base64").toString("utf-8")
 
     firebase_app = initializeApp({
         credential: cert({

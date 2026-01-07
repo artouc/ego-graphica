@@ -18,7 +18,7 @@ export default defineNitroConfig({
         upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN,
         firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
         firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,
+        firebasePrivateKeyBase64: process.env.FIREBASE_PRIVATE_KEY_BASE64,
         firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET,
         webUrl: process.env.WEB_URL,
         masterApiKey: process.env.MASTER_API_KEY
