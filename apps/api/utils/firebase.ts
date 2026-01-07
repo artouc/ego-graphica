@@ -27,17 +27,22 @@ export function initializeFirebase(): App {
 
     console.log(LOG.FIREBASE.INITIALIZING)
 
-    const config = useRuntimeConfig()
+    console.log("DEBUG Firebase env vars:", {
+        hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
+        hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
+        hasPrivateKeyBase64: !!process.env.FIREBASE_PRIVATE_KEY_BASE64,
+        privateKeyBase64Length: process.env.FIREBASE_PRIVATE_KEY_BASE64?.length
+    })
 
-    const private_key = Buffer.from(config.firebasePrivateKeyBase64 as string, "base64").toString("utf-8")
+    const private_key = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_BASE64 as string, "base64").toString("utf-8")
 
     firebase_app = initializeApp({
         credential: cert({
-            projectId: config.firebaseProjectId,
-            clientEmail: config.firebaseClientEmail,
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
             privateKey: private_key
         }),
-        storageBucket: config.firebaseStorageBucket
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET
     })
 
     console.log(LOG.FIREBASE.INITIALIZED)
