@@ -27,7 +27,7 @@ watch(() => logs.value.length, async () => {
         </div>
         <div
             ref="log_container"
-            class="flex-1 overflow-auto p-3 font-mono text-xs space-y-1"
+            class="flex-1 overflow-auto p-3 scrollbar-thin font-mono text-xs space-y-1"
         >
             <div v-if="logs.length === 0" class="text-zinc-500 text-center py-4">
                 No activity yet
@@ -43,7 +43,7 @@ watch(() => logs.value.length, async () => {
                 <span class="text-zinc-500 mr-2">
                     {{ entry.timestamp.toLocaleTimeString('ja-JP') }}
                 </span>
-                <span>{{ formatLogEntry(entry) }}</span>
+                <span class="mr-3">{{ formatLogEntry(entry) }}</span>
             </div>
         </div>
     </div>

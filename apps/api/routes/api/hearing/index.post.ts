@@ -9,31 +9,13 @@ import { generateText } from "ai"
 import { getFirestoreInstance } from "~/utils/firebase"
 import { getClaudeOpus } from "~/utils/anthropic"
 import { success, validationError, serverError } from "~/utils/response"
-import { LOG, ERROR } from "@egographica/shared"
+import { LOG, ERROR, HEARING_SYSTEM_PROMPT } from "@egographica/shared"
 
 interface RequestBody {
     bucket: string
     message: string
     hearing_id?: string
 }
-
-const SYSTEM_PROMPT = `あなたはアーティストからフィードバックを収集するAIアシスタントです。
-
-## 役割
-- アーティストがAIエージェントとの対話で感じた違和感や改善点を聞き出す
-- 具体的なシチュエーションや発言を引き出す
-- 建設的なフィードバックを促す
-
-## 質問例
-- 「エージェントのどのような対応に違和感を感じましたか？」
-- 「その時、どのような返答をしてほしかったですか？」
-- 「あなたらしさが出ていないと感じた点はありますか？」
-- 「顧客にどのような印象を与えたいですか？」
-
-## 注意
-- 共感的に傾聴する
-- 具体的なエピソードを深掘りする
-- 改善提案につなげる質問をする`
 
 export default defineEventHandler(async (event: H3Event) => {
     const body = await readBody<RequestBody>(event)
@@ -101,7 +83,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
         const { text } = await generateText({
             model,
-            system: SYSTEM_PROMPT,
+            system: HEARING_SYSTEM_PROMPT,
             messages: all_messages
         })
 

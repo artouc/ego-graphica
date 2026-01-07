@@ -4,7 +4,7 @@
 
 import { generateText } from "ai"
 import { getClaudeOpus } from "./anthropic"
-import { LOG } from "@egographica/shared"
+import { LOG, IMAGE_ANALYSIS_PROMPT } from "@egographica/shared"
 import type { ImageAnalysis } from "@egographica/shared"
 
 /** 画像をBase64に変換 */
@@ -21,24 +21,6 @@ export async function analyzeImage(
 
     const model = getClaudeOpus()
 
-    const prompt = `この画像を詳細に分析し、以下のJSON形式で結果を返してください。日本語で記述してください。
-
-{
-    "colors": ["主要な色を3-5個"],
-    "colormood": "色の印象（例: 落ち着いた、鮮やか、モノトーン）",
-    "composition": "構図の特徴（例: 中央配置、三分割、対角線）",
-    "style": "スタイル（例: 写実的、抽象的、印象派風）",
-    "technique": "技法（例: 油彩風、水彩風、デジタルアート）",
-    "subject": "主題（何が描かれているか）",
-    "elements": ["画像内の主要な要素を3-7個"],
-    "mood": "全体的な雰囲気（例: 静謐、躍動的、神秘的）",
-    "narrative": "この作品が語りかける物語性（1-2文）",
-    "tags": ["検索用タグを5-10個"],
-    "searchable": "この画像を説明する自然言語テキスト（50-100文字程度）"
-}
-
-JSONのみを返してください。`
-
     const { text } = await generateText({
         model,
         messages: [
@@ -51,7 +33,7 @@ JSONのみを返してください。`
                     },
                     {
                         type: "text",
-                        text: prompt
+                        text: IMAGE_ANALYSIS_PROMPT
                     }
                 ]
             }
