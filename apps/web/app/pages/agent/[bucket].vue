@@ -138,7 +138,7 @@ async function handleSend() {
                             case "error":
                                 messages.value.push({
                                     role: "assistant",
-                                    content: "エラーが発生しました。もう一度お試しください。"
+                                    content: "Error occurred. Please try again."
                                 })
                                 break
                         }
@@ -152,7 +152,7 @@ async function handleSend() {
         console.error("Error:", e)
         messages.value.push({
             role: "assistant",
-            content: "エラーが発生しました。もう一度お試しください。"
+            content: "Error occurred. Please try again."
         })
     } finally {
         is_loading.value = false
@@ -165,161 +165,100 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        <!-- ヘッダー -->
-        <header class="sticky top-0 z-50 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-            <div class="max-w-screen-2xl mx-auto px-6 lg:px-8">
-                <div class="flex items-center justify-between h-16">
-                    <!-- 左側: ロゴとナビゲーション -->
-                    <div class="flex items-center gap-6">
-                        <NuxtLink to="/dashboard" class="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
-                            <div class="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                <span class="text-white font-bold text-sm">eG</span>
-                            </div>
-                            <span class="font-semibold hidden sm:inline">ego Graphica</span>
-                        </NuxtLink>
-
-                        <!-- パンくずリスト -->
-                        <nav class="hidden md:flex items-center gap-2 text-sm">
-                            <NuxtLink to="/dashboard" class="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-                                Dashboard
-                            </NuxtLink>
-                            <span class="text-zinc-300 dark:text-zinc-600">/</span>
-                            <span class="text-zinc-900 dark:text-zinc-100 font-medium">Agent Test</span>
-                        </nav>
-                    </div>
-
-                    <!-- 右側: バケット情報 -->
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full">
-                            <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            <span class="text-xs font-medium text-zinc-600 dark:text-zinc-400">{{ bucket }}</span>
-                        </div>
-                    </div>
-                </div>
+    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+        <!-- Header -->
+        <header class="h-12 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4">
+            <div class="flex items-center gap-4 flex-1">
+                <NuxtLink to="/dashboard" class="flex items-center gap-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span class="text-sm">Back</span>
+                </NuxtLink>
+                <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+                <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Agent Test</span>
+            </div>
+            <div class="flex items-center gap-2 px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded text-xs">
+                <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                <span class="text-zinc-600 dark:text-zinc-400">{{ bucket }}</span>
             </div>
         </header>
 
-        <!-- メインコンテンツ -->
-        <main class="max-w-screen-2xl mx-auto px-6 lg:px-8 py-8">
-            <!-- ページタイトル -->
-            <div class="mb-8">
-                <h1 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Agent Test Console</h1>
-                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    AIエージェントの動作をリアルタイムでテストできます
-                </p>
-            </div>
-
-            <!-- 2カラムレイアウト -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- 左カラム: チャット (2/3) -->
-                <div class="lg:col-span-2">
-                    <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden h-[calc(100vh-280px)]">
-                        <!-- チャットヘッダー -->
-                        <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center">
-                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h2 class="font-semibold text-zinc-900 dark:text-zinc-100">Chat</h2>
-                                        <p class="text-xs text-zinc-500">Session: {{ session_id?.slice(0, 8) || 'New' }}...</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span v-if="is_loading" class="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400">
-                                        <div class="w-1.5 h-1.5 bg-violet-600 dark:bg-violet-400 rounded-full animate-ping" />
-                                        Processing...
-                                    </span>
-                                </div>
-                            </div>
+        <!-- Main -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Chat Panel -->
+            <div class="flex-1 flex flex-col">
+                <!-- Messages -->
+                <div ref="messages_container" class="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div v-if="messages.length === 0" class="h-full flex items-center justify-center">
+                        <div class="text-center">
+                            <svg class="w-8 h-8 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <p class="text-sm text-zinc-500">Start a conversation</p>
                         </div>
+                    </div>
 
-                        <!-- メッセージエリア -->
-                        <div ref="messages_container" class="flex-1 overflow-y-auto p-6 space-y-4 h-[calc(100%-140px)]">
-                            <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-center">
-                                <div class="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4">
-                                    <svg class="w-8 h-8 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
-                                </div>
-                                <h3 class="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-1">Start a conversation</h3>
-                                <p class="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
-                                    AIエージェントにメッセージを送信して、動作をテストしてください
-                                </p>
-                            </div>
-
-                            <div
-                                v-for="(msg, index) in messages"
-                                :key="index"
-                                :class="[
-                                    'flex',
-                                    msg.role === 'user' ? 'justify-end' : 'justify-start'
-                                ]"
-                            >
-                                <div
-                                    :class="[
-                                        'max-w-[75%] px-4 py-3 rounded-2xl',
-                                        msg.role === 'user'
-                                            ? 'bg-violet-600 text-white rounded-br-md'
-                                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
-                                    ]"
-                                >
-                                    <p class="text-sm whitespace-pre-wrap leading-relaxed">
-                                        {{ msg.content }}
-                                        <span v-if="msg.streaming" class="inline-block w-1.5 h-4 bg-current animate-pulse ml-0.5" />
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div v-if="is_loading && messages[messages.length - 1]?.role !== 'assistant'" class="flex justify-start">
-                                <div class="bg-zinc-100 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-md">
-                                    <div class="flex items-center gap-1.5">
-                                        <div class="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 0ms" />
-                                        <div class="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 150ms" />
-                                        <div class="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 300ms" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 入力エリア -->
-                        <div class="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
-                            <div class="flex items-center gap-3">
-                                <input
-                                    v-model="input"
-                                    type="text"
-                                    placeholder="Type a message..."
-                                    @keydown="handleKeydown"
-                                    :disabled="is_loading"
-                                    class="flex-1 px-4 py-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                />
-                                <button
-                                    @click="handleSend"
-                                    :disabled="!input.trim() || is_loading"
-                                    class="px-5 py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white rounded-xl font-medium text-sm transition-all disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    <span>Send</span>
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <p class="mt-2 text-xs text-zinc-400 text-center">
-                                Press <kbd class="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-xs">⌘</kbd> + <kbd class="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-xs">Enter</kbd> to send
+                    <div
+                        v-for="(msg, index) in messages"
+                        :key="index"
+                        :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']"
+                    >
+                        <div
+                            :class="[
+                                'max-w-[70%] px-3 py-2 rounded-lg text-sm',
+                                msg.role === 'user'
+                                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                                    : 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-700'
+                            ]"
+                        >
+                            <p class="whitespace-pre-wrap leading-relaxed">
+                                {{ msg.content }}
+                                <span v-if="msg.streaming" class="inline-block w-1 h-3 bg-current animate-pulse ml-0.5" />
                             </p>
+                        </div>
+                    </div>
+
+                    <div v-if="is_loading && messages[messages.length - 1]?.role !== 'assistant'" class="flex justify-start">
+                        <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 rounded-lg">
+                            <div class="flex items-center gap-1">
+                                <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 0ms" />
+                                <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 150ms" />
+                                <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 300ms" />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 右カラム: ログパネル (1/3) -->
-                <div class="lg:col-span-1">
-                    <LogPanel class="h-[calc(100vh-280px)]" />
+                <!-- Input -->
+                <div class="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                    <div class="flex items-center gap-2 max-w-3xl mx-auto">
+                        <input
+                            v-model="input"
+                            type="text"
+                            placeholder="Type a message..."
+                            @keydown="handleKeydown"
+                            :disabled="is_loading"
+                            class="flex-1 px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50 transition-all"
+                        />
+                        <button
+                            @click="handleSend"
+                            :disabled="!input.trim() || is_loading"
+                            class="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:bg-zinc-200 dark:disabled:bg-zinc-700 text-white dark:text-zinc-900 disabled:text-zinc-400 rounded text-sm font-medium transition-all disabled:cursor-not-allowed"
+                        >
+                            Send
+                        </button>
+                    </div>
+                    <p class="mt-2 text-xs text-zinc-400 text-center">
+                        <kbd class="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-[10px]">⌘</kbd> + <kbd class="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-[10px]">Enter</kbd>
+                    </p>
                 </div>
             </div>
-        </main>
+
+            <!-- Log Panel -->
+            <div class="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hidden lg:block">
+                <LogPanel class="h-full" />
+            </div>
+        </div>
     </div>
 </template>

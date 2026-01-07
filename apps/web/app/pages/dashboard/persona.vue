@@ -3,7 +3,7 @@ import { ref } from "vue"
 import { AIProvider } from "@egographica/shared"
 
 definePageMeta({
-    layout: "default"
+    layout: "dashboard"
 })
 
 const config = useRuntimeConfig()
@@ -98,10 +98,10 @@ async function handleSubmit() {
         })
 
         message_type.value = "success"
-        message.value = "ペルソナ設定を保存しました"
+        message.value = "Saved"
     } catch (e) {
         message_type.value = "error"
-        message.value = e instanceof Error ? e.message : "保存に失敗しました"
+        message.value = e instanceof Error ? e.message : "Failed to save"
     } finally {
         is_loading.value = false
     }
@@ -122,180 +122,154 @@ watch(() => auth.bucket.value, (newBucket) => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        <AppHeader title="Persona" back-to="/dashboard" />
+    <div class="p-6">
+        <!-- Header -->
+        <div class="mb-4">
+            <h1 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Persona</h1>
+            <p class="text-sm text-zinc-500">Define agent character and behavior</p>
+        </div>
 
-        <main class="max-w-screen-2xl mx-auto px-6 lg:px-8 py-8">
-            <div class="mb-8">
-                <h1 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Persona Settings</h1>
-                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    AIエージェントのキャラクターと話し方を定義します
-                </p>
-            </div>
+        <div class="max-w-xl">
+            <div class="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+                    <h2 class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Settings</h2>
+                </div>
 
-            <div class="max-w-2xl">
-                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-violet-600 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
+                <div class="p-4 space-y-4">
+                    <!-- Model -->
+                    <div class="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">AI Model</label>
+                        <select
+                            v-model="form.provider"
+                            class="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        >
+                            <option :value="AIProvider.CLAUDE_SONNET">Claude Sonnet 4.5 (Fast)</option>
+                            <option :value="AIProvider.CLAUDE_OPUS">Claude Opus 4.5 (Best)</option>
+                        </select>
+                    </div>
+
+                    <div class="border-t border-zinc-100 dark:border-zinc-800" />
+
+                    <!-- Character -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            Character Name <span class="text-zinc-400">(optional)</span>
+                        </label>
+                        <input
+                            v-model="form.character"
+                            type="text"
+                            placeholder="e.g. Art-kun"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        />
+                    </div>
+
+                    <!-- Motif -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            Motif <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            v-model="form.motif"
+                            type="text"
+                            placeholder="e.g. Frog, Cat, Alien"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        />
+                    </div>
+
+                    <!-- Philosophy -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Philosophy</label>
+                        <textarea
+                            v-model="form.philosophy"
+                            placeholder="Your creative philosophy"
+                            rows="2"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none"
+                        />
+                    </div>
+
+                    <!-- Influences -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Influences</label>
+                        <input
+                            v-model="form.influences"
+                            type="text"
+                            placeholder="Comma-separated (e.g. Basquiat, Japanese culture)"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        />
+                    </div>
+
+                    <!-- Avoidances -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Topics to Avoid</label>
+                        <input
+                            v-model="form.avoidances"
+                            type="text"
+                            placeholder="Comma-separated (e.g. politics, religion)"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        />
+                    </div>
+
+                    <div class="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                        <h3 class="text-xs font-medium text-zinc-900 dark:text-zinc-100 mb-3">Sample Response</h3>
+
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide">Situation</label>
+                                <input
+                                    v-model="form.sample_situation"
+                                    type="text"
+                                    placeholder="When a customer asks about pricing"
+                                    class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                                />
                             </div>
-                            <div>
-                                <h2 class="font-semibold text-zinc-900 dark:text-zinc-100">Agent Persona</h2>
-                                <p class="text-xs text-zinc-500">Define character and behavior</p>
+
+                            <div class="space-y-1">
+                                <label class="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide">Customer Message</label>
+                                <input
+                                    v-model="form.sample_message"
+                                    type="text"
+                                    placeholder="How much is this painting?"
+                                    class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                                />
+                            </div>
+
+                            <div class="space-y-1">
+                                <label class="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide">Ideal Response</label>
+                                <textarea
+                                    v-model="form.sample_response"
+                                    placeholder="Thank you for your interest!..."
+                                    rows="2"
+                                    class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none"
+                                />
                             </div>
                         </div>
                     </div>
 
-                    <div class="p-6 space-y-6">
-                        <!-- AI Model Selection -->
-                        <div class="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
-                            <label class="block text-sm font-medium text-violet-900 dark:text-violet-100 mb-2">
-                                AI Model
-                            </label>
-                            <select
-                                v-model="form.provider"
-                                class="w-full px-4 py-2.5 bg-white dark:bg-zinc-800 border border-violet-200 dark:border-violet-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                            >
-                                <option :value="AIProvider.CLAUDE_SONNET">Claude Sonnet 4.5 (推奨・高速)</option>
-                                <option :value="AIProvider.CLAUDE_OPUS">Claude Opus 4.5 (最高品質)</option>
-                            </select>
-                            <p class="mt-2 text-xs text-violet-600 dark:text-violet-400">
-                                Sonnet: 高速で実用的な応答。Opus: より高品質だが低速・高コスト。
-                            </p>
-                        </div>
+                    <button
+                        @click="handleSubmit"
+                        :disabled="!form.motif || is_loading || !auth.is_configured.value"
+                        class="w-full px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:bg-zinc-200 dark:disabled:bg-zinc-700 text-white dark:text-zinc-900 disabled:text-zinc-400 rounded text-sm font-medium transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                        <svg v-if="is_loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {{ is_loading ? 'Saving...' : 'Save' }}
+                    </button>
 
-                        <div class="border-t border-zinc-200 dark:border-zinc-700" />
-
-                        <!-- Character Name -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                Character Name <span class="text-zinc-400">(optional)</span>
-                            </label>
-                            <input
-                                v-model="form.character"
-                                type="text"
-                                placeholder="例: アートくん"
-                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                            />
-                        </div>
-
-                        <!-- Motif -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                Motif <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                v-model="form.motif"
-                                type="text"
-                                placeholder="例: カエル、猫、宇宙人"
-                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                            />
-                        </div>
-
-                        <!-- Philosophy -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                Creative Philosophy
-                            </label>
-                            <textarea
-                                v-model="form.philosophy"
-                                placeholder="あなたの創作に対する考え方や信念"
-                                rows="3"
-                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-                            />
-                        </div>
-
-                        <!-- Influences -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                Influences
-                            </label>
-                            <textarea
-                                v-model="form.influences"
-                                placeholder="カンマ区切りで入力（例: 岡本太郎, バスキア, 日本の伝統文化）"
-                                rows="2"
-                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-                            />
-                        </div>
-
-                        <!-- Avoidances -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                Topics to Avoid
-                            </label>
-                            <textarea
-                                v-model="form.avoidances"
-                                placeholder="カンマ区切りで入力（例: 政治, 宗教批判）"
-                                rows="2"
-                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-                            />
-                        </div>
-
-                        <div class="border-t border-zinc-200 dark:border-zinc-700 pt-6">
-                            <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Sample Response</h3>
-
-                            <div class="space-y-4">
-                                <div class="space-y-2">
-                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Situation</label>
-                                    <input
-                                        v-model="form.sample_situation"
-                                        type="text"
-                                        placeholder="例: 顧客が作品の価格について質問したとき"
-                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                    />
-                                </div>
-
-                                <div class="space-y-2">
-                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Customer Message</label>
-                                    <input
-                                        v-model="form.sample_message"
-                                        type="text"
-                                        placeholder="例: この絵はいくらですか？"
-                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                    />
-                                </div>
-
-                                <div class="space-y-2">
-                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Ideal Response</label>
-                                    <textarea
-                                        v-model="form.sample_response"
-                                        placeholder="例: ご興味いただきありがとうございます！..."
-                                        rows="3"
-                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <button
-                            @click="handleSubmit"
-                            :disabled="!form.motif || is_loading || !auth.is_configured.value"
-                            class="w-full px-4 py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white rounded-xl font-medium text-sm transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            <svg v-if="is_loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            {{ is_loading ? 'Saving...' : 'Save Persona' }}
-                        </button>
-
-                        <div
-                            v-if="message"
-                            :class="[
-                                'p-4 rounded-lg text-sm',
-                                message_type === 'error'
-                                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800'
-                                    : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                            ]"
-                        >
-                            {{ message }}
-                        </div>
+                    <div
+                        v-if="message"
+                        :class="[
+                            'p-2 rounded text-sm',
+                            message_type === 'error'
+                                ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                        ]"
+                    >
+                        {{ message }}
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
     </div>
 </template>
