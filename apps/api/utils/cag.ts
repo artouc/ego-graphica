@@ -123,7 +123,7 @@ export async function clearAllCache(): Promise<void> {
 }
 
 /**
- * RAGサマリーを構築（作品・ファイル・URLの情報をまとめる）
+ * RAGサマリーを構築（作品・ファイル・URL・アセットの情報をまとめる）
  * Firestoreクエリを並列実行して高速化
  */
 export async function buildRagSummary(
@@ -132,8 +132,8 @@ export async function buildRagSummary(
 ): Promise<string> {
     const summary_parts: string[] = []
 
-    // 3つのコレクションを並列で取得
-    const [works_result, files_result, urls_result] = await Promise.allSettled([
+    // 4つのコレクションを並列で取得
+    const [works_result, files_result, urls_result, assets_result] = await Promise.allSettled([
         db.collection(bucket)
             .doc("works")
             .collection("items")
@@ -151,6 +151,12 @@ export async function buildRagSummary(
             .collection("items")
             .orderBy("created", "desc")
             .limit(20)
+            .get(),
+        db.collection(bucket)
+            .doc("assets")
+            .collection("items")
+            .orderBy("created", "desc")
+            .limit(100)
             .get()
     ])
 
@@ -189,6 +195,21 @@ export async function buildRagSummary(
         }
     } else if (urls_result.status === "rejected") {
         console.error("Failed to fetch URLs for RAG summary:", urls_result.reason)
+    }
+
+    // アセット情報を処理（画像一覧 - showImagePictureツール用）
+    if (assets_result.status === "fulfilled" && !assets_result.value.empty) {
+        summary_parts.push("\n## 利用可能な画像（showImagePictureツールで表示可能）")
+        for (const doc of assets_result.value.docs) {
+            const asset = doc.data()
+            const id = doc.id
+            const subject = asset.analysis?.subject || asset.filename || "Unknown"
+            const searchable = asset.analysis?.searchable || ""
+            const tags = asset.analysis?.tags?.join(", ") || ""
+            summary_parts.push(`- [ID: ${id}] ${subject}${searchable ? ` - ${searchable.slice(0, 150)}` : ""}${tags ? ` (${tags})` : ""}`)
+        }
+    } else if (assets_result.status === "rejected") {
+        console.error("Failed to fetch assets for RAG summary:", assets_result.reason)
     }
 
     return summary_parts.join("\n")

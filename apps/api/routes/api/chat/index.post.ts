@@ -230,6 +230,13 @@ export default defineEventHandler(async (event: H3Event) => {
             sendAgentEvent(`ツール呼び出し：${tool_name}`)
             sendTiming("TOOL", 0) // ツール自体の実行時間は瞬時
         },
+        onImage: (image: { url: string; subject: string; asset_id: string }) => {
+            event_stream.push({
+                event: "image",
+                data: JSON.stringify(image)
+            })
+            sendAgentEvent(`画像を表示：${image.subject}`)
+        },
         onDone: async () => {
             // LLMタイミングを送信
             if (llm_start > 0) {
@@ -293,7 +300,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
     // ストリーミング会話を開始（Anthropic SDK）
     const anthropic = getAnthropicSDKClient()
-    runClaudeConversationStream(anthropic, model, system_prompt, conversation_history, callbacks)
+    runClaudeConversationStream(anthropic, model, system_prompt, conversation_history, callbacks, body.bucket)
 
     return event_stream.send()
 })

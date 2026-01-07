@@ -4,6 +4,7 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk"
+import { getFirestoreInstance } from "./firebase"
 
 /** ツールパラメータの型 */
 interface ToolParameter {
@@ -29,10 +30,22 @@ export interface ShouldContinueInput {
     next_topic: string
 }
 
+/** showImagePicture の入力型 */
+export interface ShowImagePictureInput {
+    asset_id: string
+    reason: string
+}
+
 /** ツール実行結果 */
 export interface ToolExecutionResult {
     should_continue: boolean
     result: string
+    /** 画像表示用 */
+    image?: {
+        url: string
+        subject: string
+        asset_id: string
+    }
 }
 
 /** 会話メッセージ型 */
@@ -46,6 +59,7 @@ export interface StreamCallbacks {
     onTextDelta: (text: string) => void
     onMessageComplete: (message: string) => void
     onToolCall?: (tool_name: string) => void
+    onImage?: (image: { url: string; subject: string; asset_id: string }) => void
     onDone: () => void
     onError: (error: Error) => void
 }
@@ -71,6 +85,24 @@ export const CHAT_TOOLS: ToolDefinition[] = [
             },
             required: ["have_more_to_say", "next_topic"]
         }
+    },
+    {
+        name: "showImagePicture",
+        description: "会話のコンテキストに沿った画像を表示する。利用可能な画像一覧から適切なものを選んで表示できる。画像について説明したい時、視覚的な参考を見せたい時に使用。",
+        parameters: {
+            type: "object",
+            properties: {
+                asset_id: {
+                    type: "string",
+                    description: "表示する画像のアセットID（利用可能な画像一覧から選択）"
+                },
+                reason: {
+                    type: "string",
+                    description: "この画像を選んだ理由（簡潔に）"
+                }
+            },
+            required: ["asset_id", "reason"]
+        }
     }
 ]
 
@@ -93,10 +125,11 @@ export function getAnthropicTools() {
 /**
  * ツールを実行
  */
-export function executeTool(
+export async function executeTool(
     tool_name: string,
-    input: unknown
-): ToolExecutionResult {
+    input: unknown,
+    bucket?: string
+): Promise<ToolExecutionResult> {
     switch (tool_name) {
         case "shouldContinue": {
             const { have_more_to_say, next_topic } = input as ShouldContinueInput
@@ -113,6 +146,53 @@ export function executeTool(
                 return {
                     should_continue: false,
                     result: "完了"
+                }
+            }
+        }
+        case "showImagePicture": {
+            const { asset_id, reason } = input as ShowImagePictureInput
+            console.log("showImagePicture:", { asset_id, reason, bucket })
+
+            if (!bucket) {
+                return {
+                    should_continue: true,
+                    result: "エラー: バケットが指定されていません"
+                }
+            }
+
+            try {
+                const db = getFirestoreInstance()
+                const asset_doc = await db
+                    .collection(bucket)
+                    .doc("assets")
+                    .collection("items")
+                    .doc(asset_id)
+                    .get()
+
+                if (!asset_doc.exists) {
+                    return {
+                        should_continue: true,
+                        result: `画像が見つかりませんでした（ID: ${asset_id}）`
+                    }
+                }
+
+                const asset = asset_doc.data()!
+                const subject = asset.analysis?.subject || asset.filename || "画像"
+
+                return {
+                    should_continue: true,
+                    result: `画像「${subject}」を表示しました。理由: ${reason}`,
+                    image: {
+                        url: asset.url,
+                        subject,
+                        asset_id
+                    }
+                }
+            } catch (e) {
+                console.error("showImagePicture error:", e)
+                return {
+                    should_continue: true,
+                    result: `画像の取得に失敗しました: ${e}`
                 }
             }
         }
@@ -136,10 +216,11 @@ export async function runClaudeConversationStream(
     model: string,
     system_prompt: string,
     conversation_history: ConversationMessage[],
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
+    bucket?: string
 ): Promise<void> {
     const tools = getAnthropicTools()
-    console.log("Claude model:", model)
+    console.log("Claude model:", model, "bucket:", bucket)
 
     type AnthropicMessage = {
         role: "user" | "assistant"
@@ -235,8 +316,13 @@ export async function runClaudeConversationStream(
                 console.log("Tool input raw:", tool.name, tool.input)
                 const input = tool.input ? JSON.parse(tool.input) : {}
                 console.log("Tool input parsed:", tool.name, input)
-                const result = executeTool(tool.name, input)
+                const result = await executeTool(tool.name, input, bucket)
                 console.log("Tool executed:", tool.name, "should_continue:", result.should_continue)
+
+                // 画像イベントを送信
+                if (result.image) {
+                    callbacks.onImage?.(result.image)
+                }
 
                 tool_results.push({
                     type: "tool_result",

@@ -12,7 +12,18 @@ const bucket = computed(() => route.params.bucket as string)
 
 const { addAgentLog, addSystemLog, clearLogs } = useActivityLog()
 
-const messages = ref<Array<{ role: "user" | "assistant"; content: string; streaming?: boolean }>>([])
+interface ChatMessage {
+    role: "user" | "assistant"
+    content: string
+    streaming?: boolean
+    image?: {
+        url: string
+        subject: string
+        asset_id: string
+    }
+}
+
+const messages = ref<ChatMessage[]>([])
 const input = ref("")
 const is_loading = ref(false)
 const is_typing = ref(false)
@@ -160,6 +171,20 @@ async function handleSend() {
                                 await scrollToBottom()
                                 break
 
+                            case "image":
+                                // 画像を新しいメッセージとして追加
+                                messages.value.push({
+                                    role: "assistant",
+                                    content: "",
+                                    image: {
+                                        url: data.url,
+                                        subject: data.subject,
+                                        asset_id: data.asset_id
+                                    }
+                                })
+                                await scrollToBottom()
+                                break
+
                             case "done":
                                 cancelTyping()
                                 break
@@ -235,7 +260,24 @@ onMounted(() => {
                         :key="index"
                         :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']"
                     >
+                        <!-- 画像メッセージ -->
                         <div
+                            v-if="msg.image"
+                            class="max-w-[70%] rounded-lg overflow-hidden bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700"
+                        >
+                            <img
+                                :src="msg.image.url"
+                                :alt="msg.image.subject"
+                                class="w-full max-h-80 object-contain bg-zinc-100 dark:bg-zinc-900"
+                                loading="lazy"
+                            />
+                            <div class="px-3 py-2">
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ msg.image.subject }}</p>
+                            </div>
+                        </div>
+                        <!-- テキストメッセージ -->
+                        <div
+                            v-else
                             :class="[
                                 'max-w-[70%] px-3 py-2 rounded-lg text-sm',
                                 msg.role === 'user'
