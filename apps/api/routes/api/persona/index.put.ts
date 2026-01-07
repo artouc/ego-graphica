@@ -19,6 +19,7 @@ interface RequestBody {
     samples: SampleResponse[]
     avoidances: string[]
     provider?: string
+    situation?: string
 }
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -45,6 +46,9 @@ export default defineEventHandler(async (event: H3Event) => {
     }
     if (body.provider && (body.provider === AIProvider.CLAUDE_OPUS || body.provider === AIProvider.CLAUDE_SONNET)) {
         persona.provider = body.provider
+    }
+    if (body.situation) {
+        persona.situation = body.situation
     }
 
     await db.collection(body.bucket).doc("persona").set(persona)

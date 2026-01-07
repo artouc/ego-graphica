@@ -15,6 +15,7 @@ const form = ref({
     philosophy: "",
     influences: "",
     avoidances: "",
+    situation: "",
     sample_situation: "",
     sample_message: "",
     sample_response: "",
@@ -48,6 +49,7 @@ async function fetchPersona() {
             form.value.philosophy = p.philosophy || ""
             form.value.influences = (p.influences || []).join(", ")
             form.value.avoidances = (p.avoidances || []).join(", ")
+            form.value.situation = p.situation || ""
             form.value.provider = p.provider || AIProvider.CLAUDE_SONNET
 
             if (p.samples && p.samples.length > 0) {
@@ -92,6 +94,7 @@ async function handleSubmit() {
                 philosophy: form.value.philosophy,
                 influences: form.value.influences.split(",").map(s => s.trim()).filter(Boolean),
                 avoidances: form.value.avoidances.split(",").map(s => s.trim()).filter(Boolean),
+                situation: form.value.situation || undefined,
                 samples,
                 provider: form.value.provider
             }
@@ -207,6 +210,18 @@ watch(() => auth.bucket.value, (newBucket) => {
                             placeholder="Comma-separated (e.g. politics, religion)"
                             class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400"
                         />
+                    </div>
+
+                    <!-- Situation -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Situation</label>
+                        <textarea
+                            v-model="form.situation"
+                            placeholder="e.g. 相手は実際の作品〇〇を見にきたお客さん。落ち着いた静かな部屋で展示中"
+                            rows="2"
+                            class="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none"
+                        />
+                        <p class="text-[10px] text-zinc-400">Agent context: where and how the agent is used</p>
                     </div>
 
                     <div class="border-t border-zinc-100 dark:border-zinc-800 pt-4">

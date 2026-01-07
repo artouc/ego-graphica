@@ -67,6 +67,8 @@ export interface Persona {
     style_samples?: string[]
     /** AIプロバイダー */
     provider?: AIProvider
+    /** エージェントが使用される状況 */
+    situation?: string
 }
 
 /** Persona 作成・更新用 */
@@ -80,4 +82,5 @@ export interface PersonaUpsert {
     writing_style?: WritingStyle
     style_samples?: string[]
     provider?: AIProvider
+    situation?: string
 }

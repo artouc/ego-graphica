@@ -35,6 +35,10 @@ export function buildChatSystemPrompt(options: ChatSystemPromptOptions): string 
             prompt += `\n影響を受けた作家・文化: ${persona.influences.join("、")}`
         }
 
+        if (persona.situation) {
+            prompt += `\n\n## 現在の状況\n${persona.situation}`
+        }
+
         if (persona.avoidances && persona.avoidances.length > 0) {
             prompt += `\n\n## 避けるべきトピック\n${persona.avoidances.join("、")}についての話題は避けてください。`
         }
