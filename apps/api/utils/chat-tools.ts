@@ -45,6 +45,7 @@ export interface ConversationMessage {
 export interface StreamCallbacks {
     onTextDelta: (text: string) => void
     onMessageComplete: (message: string) => void
+    onToolCall?: (tool_name: string) => void
     onDone: () => void
     onError: (error: Error) => void
 }
@@ -103,9 +104,16 @@ export function executeTool(
             const should_continue = have_more_to_say === true
             console.log("shouldContinue:", { have_more_to_say, next_topic, should_continue })
 
-            return {
-                should_continue,
-                result: JSON.stringify({ continue: should_continue, topic: next_topic || "なし" })
+            if (should_continue) {
+                return {
+                    should_continue: true,
+                    result: `続けてください。次の話題: ${next_topic || "続き"}`
+                }
+            } else {
+                return {
+                    should_continue: false,
+                    result: "完了"
+                }
             }
         }
         default:
@@ -221,6 +229,9 @@ export async function runClaudeConversationStream(
 
             const tool_results: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = []
             for (const tool of tool_list) {
+                // ツール呼び出しイベントを送信
+                callbacks.onToolCall?.(tool.name)
+
                 console.log("Tool input raw:", tool.name, tool.input)
                 const input = tool.input ? JSON.parse(tool.input) : {}
                 console.log("Tool input parsed:", tool.name, input)

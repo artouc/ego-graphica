@@ -1,175 +1,232 @@
 /**
  * ego Graphica - 文体分析ユーティリティ
- * アップロードされたテキストから文体特徴を抽出
+ * テキストサンプルから口調・文体を分析してCAGに活用
  */
 
 import { generateText } from "ai"
 import { getClaudeSonnet } from "./anthropic"
-import { LOG } from "@egographica/shared"
 import type { WritingStyle } from "@egographica/shared"
 
-/** 文体分析のプロンプト */
-const STYLE_ANALYSIS_PROMPT = `以下のテキストの文体を詳細に分析し、JSON形式で結果を返してください。
+/** 分析に必要な最小文字数 */
+const MIN_TEXT_LENGTH = 100
 
-分析観点:
-1. 文末表現のパターン（です/ます調、である調、だ調など）
-2. 句読点の使い方（感嘆符、疑問符、絵文字の使用有無）
-3. フォーマル度（0.0-1.0）
-4. 特徴的なフレーズや言い回し
-5. 避けているパターン（使われていない表現）
-6. 文の長さの傾向
+/** サンプル文の最大数 */
+const MAX_STYLE_SAMPLES = 5
+
+/** サンプル文の最大長 */
+const MAX_SAMPLE_LENGTH = 150
+
+/**
+ * テキストから代表的な文章サンプルを抽出
+ */
+export function extractStyleSamples(texts: string[]): string[] {
+    const samples: string[] = []
+
+    for (const text of texts) {
+        // 文で分割
+        const sentences = text
+            .split(/[。！？\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length >= 20 && s.length <= MAX_SAMPLE_LENGTH)
+
+        for (const sentence of sentences) {
+            // 挨拶や定型文を除外
+            if (isGenericSentence(sentence)) continue
+
+            samples.push(sentence)
+            if (samples.length >= MAX_STYLE_SAMPLES * 2) break
+        }
+
+        if (samples.length >= MAX_STYLE_SAMPLES * 2) break
+    }
+
+    // 多様性を持たせるためランダムに選択
+    const shuffled = samples.sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, MAX_STYLE_SAMPLES)
+}
+
+/**
+ * 定型文かどうかを判定
+ */
+function isGenericSentence(sentence: string): boolean {
+    const generic_patterns = [
+        /^(こんにちは|こんばんは|おはよう|はじめまして)/,
+        /^(ありがとう|よろしく)/,
+        /^https?:\/\//,
+        /^\d+円/,
+        /^[\d\s:\/\-]+$/ // 日付や時間のみ
+    ]
+
+    return generic_patterns.some(p => p.test(sentence))
+}
+
+/**
+ * Claude で文体を分析
+ */
+export async function analyzeWritingStyle(texts: string[]): Promise<WritingStyle | null> {
+    // テキストを結合
+    const combined_text = texts.join("\n\n")
+
+    if (combined_text.length < MIN_TEXT_LENGTH) {
+        console.log("Text too short for style analysis:", combined_text.length)
+        return null
+    }
+
+    // 分析用に制限
+    const analysis_text = combined_text.slice(0, 5000)
+
+    const prompt = `以下のテキストの文体・口調を分析し、JSON形式で結果を返してください。
+
+テキスト:
+${analysis_text}
 
 以下のJSON形式で返してください:
 {
-    "sentence_endings": ["文末表現を3-5個"],
+    "sentence_endings": ["よく使われる文末表現を3-5個"],
     "punctuation": {
-        "uses_exclamation": false,
-        "uses_question_marks": false,
-        "uses_emoji": false,
-        "period_style": "。",
-        "comma_style": "、"
+        "uses_exclamation": true/false,
+        "uses_question_marks": true/false,
+        "uses_emoji": true/false,
+        "period_style": "。" または "." または "none",
+        "comma_style": "、" または ","
     },
-    "formality_level": 0.8,
-    "characteristic_phrases": ["特徴的なフレーズを3-5個"],
-    "avoid_patterns": ["使われていないパターンを3-5個"],
-    "sentence_length": "medium",
-    "description": "この文体の総合的な特徴を1-2文で"
+    "formality_level": 0.0-1.0の数値（1.0が最もフォーマル）,
+    "characteristic_phrases": ["特徴的な言い回しを3-5個"],
+    "avoid_patterns": ["使われていないパターンを2-3個"],
+    "sentence_length": "short" または "medium" または "long",
+    "description": "この人の文体を50文字程度で説明"
 }
 
 JSONのみを返してください。`
 
-/** サンプル文抽出のプロンプト */
-const SAMPLE_EXTRACTION_PROMPT = `以下のテキストから、この著者の文体を最もよく表している文を5つ選んでください。
+    try {
+        const model = getClaudeSonnet()
 
-選定基準:
-- 著者の語り口や考え方が表れている文
-- 特徴的な言い回しや表現が含まれる文
-- 完結した意味を持つ文（断片的でないもの）
+        const { text } = await generateText({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            maxTokens: 1000
+        })
 
-JSON配列形式で返してください:
-["文1", "文2", "文3", "文4", "文5"]
+        const json_match = text.match(/\{[\s\S]*\}/)
+        if (!json_match) {
+            console.error("Failed to parse style analysis result")
+            return null
+        }
 
-JSONのみを返してください。`
+        const result = JSON.parse(json_match[0]) as WritingStyle
+        console.log("Writing style analyzed:", result.description)
 
-/**
- * テキストから文体を分析
- */
-export async function analyzeWritingStyle(text: string): Promise<WritingStyle> {
-    console.log(LOG.AI.STYLE_ANALYZING)
-
-    const model = getClaudeSonnet()
-
-    // テキストが長すぎる場合は先頭部分を使用
-    const analysis_text = text.slice(0, 10000)
-
-    const { text: result } = await generateText({
-        model,
-        messages: [
-            {
-                role: "user",
-                content: `${STYLE_ANALYSIS_PROMPT}\n\n---\n\n${analysis_text}`
-            }
-        ]
-    })
-
-    console.log(LOG.AI.STYLE_ANALYZED)
-
-    const json_match = result.match(/\{[\s\S]*\}/)
-    if (!json_match) {
-        throw new Error("Failed to parse writing style analysis result")
+        return result
+    } catch (e) {
+        console.error("Style analysis failed:", e)
+        return null
     }
-
-    return JSON.parse(json_match[0]) as WritingStyle
 }
 
 /**
- * テキストからサンプル文を抽出
+ * Firestoreからテキストコンテンツを収集
  */
-export async function extractStyleSamples(text: string): Promise<string[]> {
-    console.log(LOG.AI.STYLE_SAMPLES_EXTRACTING)
+export async function collectTextContent(
+    db: FirebaseFirestore.Firestore,
+    bucket: string
+): Promise<string[]> {
+    const texts: string[] = []
 
-    const model = getClaudeSonnet()
+    // 3つのソースを並列で取得
+    const [files_result, urls_result, hearings_result] = await Promise.allSettled([
+        // ファイルからテキストを取得
+        db.collection(bucket)
+            .doc("files")
+            .collection("items")
+            .orderBy("created", "desc")
+            .limit(10)
+            .get(),
+        // URLからテキストを取得
+        db.collection(bucket)
+            .doc("urls")
+            .collection("items")
+            .orderBy("created", "desc")
+            .limit(10)
+            .get(),
+        // ヒアリングからテキストを取得
+        db.collection(bucket)
+            .doc("hearings")
+            .collection("items")
+            .orderBy("created", "desc")
+            .limit(5)
+            .get()
+    ])
 
-    // テキストが長すぎる場合は先頭部分を使用
-    const analysis_text = text.slice(0, 10000)
-
-    const { text: result } = await generateText({
-        model,
-        messages: [
-            {
-                role: "user",
-                content: `${SAMPLE_EXTRACTION_PROMPT}\n\n---\n\n${analysis_text}`
+    // ファイルのテキスト
+    if (files_result.status === "fulfilled") {
+        for (const doc of files_result.value.docs) {
+            const file = doc.data()
+            if (file.text_content) {
+                texts.push(file.text_content)
             }
-        ]
-    })
-
-    console.log(LOG.AI.STYLE_SAMPLES_EXTRACTED)
-
-    const json_match = result.match(/\[[\s\S]*\]/)
-    if (!json_match) {
-        throw new Error("Failed to parse style samples result")
+        }
     }
 
-    return JSON.parse(json_match[0]) as string[]
+    // URLのテキスト
+    if (urls_result.status === "fulfilled") {
+        for (const doc of urls_result.value.docs) {
+            const url_data = doc.data()
+            if (url_data.text_content) {
+                texts.push(url_data.text_content)
+            }
+        }
+    }
+
+    // ヒアリングのテキスト（アシスタントの発言のみ）
+    if (hearings_result.status === "fulfilled") {
+        for (const doc of hearings_result.value.docs) {
+            const hearing = doc.data()
+            if (hearing.messages) {
+                const assistant_messages = hearing.messages
+                    .filter((m: { role: string }) => m.role === "assistant")
+                    .map((m: { content: string }) => m.content)
+                texts.push(...assistant_messages)
+            }
+        }
+    }
+
+    return texts
 }
 
 /**
- * 既存の文体分析結果と新しい分析結果をマージ
- * 複数ファイルからの分析を統合するため
+ * 2つのWritingStyleをマージ（新しい分析結果を優先しつつ既存も保持）
  */
 export function mergeWritingStyles(
-    existing: WritingStyle | undefined,
-    new_style: WritingStyle
-): WritingStyle {
-    if (!existing) {
-        return new_style
-    }
+    existing: WritingStyle | undefined | null,
+    new_style: WritingStyle | null
+): WritingStyle | null {
+    if (!new_style) return existing || null
+    if (!existing) return new_style
 
-    // 文末表現をマージ（重複排除）
-    const merged_endings = [...new Set([...existing.sentence_endings, ...new_style.sentence_endings])]
-
-    // 特徴的フレーズをマージ（最大10個）
-    const merged_phrases = [...new Set([...existing.characteristic_phrases, ...new_style.characteristic_phrases])].slice(0, 10)
-
-    // 避けるパターンをマージ
-    const merged_avoids = [...new Set([...existing.avoid_patterns, ...new_style.avoid_patterns])]
-
-    // フォーマル度は平均
-    const avg_formality = (existing.formality_level + new_style.formality_level) / 2
-
-    // 句読点スタイルは新しい方を優先（より多くのデータから）
-    // ただしフラグはAND（両方で使用されている場合のみtrue）
-    const merged_punctuation = {
-        uses_exclamation: existing.punctuation.uses_exclamation && new_style.punctuation.uses_exclamation,
-        uses_question_marks: existing.punctuation.uses_question_marks || new_style.punctuation.uses_question_marks,
-        uses_emoji: existing.punctuation.uses_emoji && new_style.punctuation.uses_emoji,
-        period_style: new_style.punctuation.period_style,
-        comma_style: new_style.punctuation.comma_style
-    }
-
+    // 新しい分析結果を基本に、一部のフィールドは既存とマージ
     return {
-        sentence_endings: merged_endings.slice(0, 5),
-        punctuation: merged_punctuation,
-        formality_level: Math.round(avg_formality * 100) / 100,
-        characteristic_phrases: merged_phrases,
-        avoid_patterns: merged_avoids.slice(0, 10),
-        sentence_length: new_style.sentence_length,
-        description: new_style.description
+        sentence_endings: [...new Set([...new_style.sentence_endings, ...existing.sentence_endings])].slice(0, 5),
+        punctuation: new_style.punctuation, // 新しい方を優先
+        formality_level: (new_style.formality_level + existing.formality_level) / 2, // 平均
+        characteristic_phrases: [...new Set([...new_style.characteristic_phrases, ...existing.characteristic_phrases])].slice(0, 5),
+        avoid_patterns: [...new Set([...new_style.avoid_patterns, ...existing.avoid_patterns])].slice(0, 3),
+        sentence_length: new_style.sentence_length, // 新しい方を優先
+        description: new_style.description // 新しい方を優先
     }
 }
 
 /**
- * サンプル文をマージ（最大10個を維持）
+ * 2つのスタイルサンプル配列をマージ（重複を除去）
  */
 export function mergeStyleSamples(
-    existing: string[] | undefined,
+    existing: string[] | undefined | null,
     new_samples: string[]
 ): string[] {
-    if (!existing) {
-        return new_samples.slice(0, 10)
-    }
+    if (!existing || existing.length === 0) return new_samples
+    if (new_samples.length === 0) return existing
 
-    // 重複を排除してマージ
-    const merged = [...new Set([...existing, ...new_samples])]
-    return merged.slice(0, 10)
+    // 重複を除去して結合、最大数を制限
+    const merged = [...new Set([...new_samples, ...existing])]
+    return merged.slice(0, MAX_STYLE_SAMPLES)
 }

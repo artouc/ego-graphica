@@ -1,14 +1,17 @@
 /**
  * ego Graphica - Cache Augmented Generation (CAG)
- * ペルソナとRAGサマリーをRedisにキャッシュ
+ * ペルソナ・RAGサマリー・口調分析をRedisにキャッシュ
  */
 
-import type { Persona } from "@egographica/shared"
+import type { Persona, WritingStyle } from "@egographica/shared"
 import { getRedisClient, REDIS_KEYS, REDIS_TTL } from "./redis"
+import { analyzeWritingStyle, extractStyleSamples, collectTextContent } from "./style-analyzer"
 
 interface CachedContext {
     persona: Persona | null
     rag_summary: string
+    writing_style: WritingStyle | null
+    style_samples: string[]
     cached_at: number
 }
 
@@ -45,7 +48,9 @@ export async function getCache(bucket: string): Promise<CachedContext | null> {
 export async function setCache(
     bucket: string,
     persona: Persona | null,
-    rag_summary: string
+    rag_summary: string,
+    writing_style: WritingStyle | null = null,
+    style_samples: string[] = []
 ): Promise<void> {
     try {
         const redis = getRedisClient()
@@ -54,6 +59,8 @@ export async function setCache(
         const data: CachedContext = {
             persona,
             rag_summary,
+            writing_style,
+            style_samples,
             cached_at: Date.now()
         }
 
@@ -185,4 +192,37 @@ export async function buildRagSummary(
     }
 
     return summary_parts.join("\n")
+}
+
+/**
+ * 口調分析を構築（テキストコンテンツから文体を分析）
+ */
+export async function buildStyleAnalysis(
+    db: FirebaseFirestore.Firestore,
+    bucket: string
+): Promise<{ writing_style: WritingStyle | null; style_samples: string[] }> {
+    console.log("Building style analysis for bucket:", bucket)
+
+    try {
+        // テキストコンテンツを収集
+        const texts = await collectTextContent(db, bucket)
+
+        if (texts.length === 0) {
+            console.log("No text content found for style analysis")
+            return { writing_style: null, style_samples: [] }
+        }
+
+        console.log(`Found ${texts.length} text sources for analysis`)
+
+        // 並列で分析とサンプル抽出を実行
+        const [writing_style, style_samples] = await Promise.all([
+            analyzeWritingStyle(texts),
+            Promise.resolve(extractStyleSamples(texts))
+        ])
+
+        return { writing_style, style_samples }
+    } catch (e) {
+        console.error("Style analysis build failed:", e)
+        return { writing_style: null, style_samples: [] }
+    }
 }

@@ -11,7 +11,8 @@ import { getFirestoreInstance } from "~/utils/firebase"
 import { generateEmbedding } from "~/utils/openai"
 import { queryVectors } from "~/utils/pinecone"
 import { getAnthropicSDKClient } from "~/utils/anthropic"
-import { getCache, setCache, buildRagSummary } from "~/utils/cag"
+import { getCache, setCache, buildRagSummary, buildStyleAnalysis } from "~/utils/cag"
+import type { WritingStyle } from "@egographica/shared"
 import { getCachedSessionHistory, setSessionCache, appendToSessionCache } from "~/utils/session-cache"
 import { getCachedVectorResults, setVectorCache } from "~/utils/vector-cache"
 import { estimateTokens, truncateToTokenLimit, getContextTokenBudget } from "~/utils/token-counter"
@@ -37,8 +38,17 @@ function shouldSkipRealtimeRag(message: string): boolean {
     return false
 }
 
+/** システムプロンプト構築用のオプション */
+interface SystemPromptOptions {
+    persona: Persona | null
+    context: string
+    writing_style: WritingStyle | null
+    style_samples: string[]
+}
+
 /** ペルソナからシステムプロンプトを生成（ストリーミング用） */
-function buildSystemPrompt(persona: Persona | null, context: string): string {
+function buildSystemPrompt(options: SystemPromptOptions): string {
+    const { persona, context, writing_style, style_samples } = options
     let prompt = `あなたはアーティストの代わりに顧客対応を行うAIエージェント「ego Graphica」です。`
 
     if (persona) {
@@ -57,17 +67,6 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
             prompt += `\n影響を受けた作家・文化: ${persona.influences.join("、")}`
         }
 
-        if (persona.writing_style) {
-            const style = persona.writing_style
-            prompt += `\n\n## 文体の参考（自然に取り入れる程度で）`
-            prompt += `\n${style.description}`
-        }
-
-        if (persona.style_samples && persona.style_samples.length > 0) {
-            prompt += `\n\n## 文章例（参考程度）`
-            prompt += `\n「${persona.style_samples[0]}」`
-        }
-
         if (persona.avoidances && persona.avoidances.length > 0) {
             prompt += `\n\n## 避けるべきトピック\n${persona.avoidances.join("、")}についての話題は避けてください。`
         }
@@ -82,6 +81,31 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
         }
     }
 
+    // 口調分析をCAGキャッシュから適用
+    if (writing_style) {
+        prompt += `\n\n## 文体ガイド（CAG）`
+        prompt += `\n${writing_style.description}`
+        prompt += `\n- 文末表現: ${writing_style.sentence_endings.join("、")}`
+        prompt += `\n- フォーマル度: ${writing_style.formality_level < 0.4 ? "カジュアル" : writing_style.formality_level < 0.7 ? "やや丁寧" : "フォーマル"}`
+        if (writing_style.characteristic_phrases.length > 0) {
+            prompt += `\n- 特徴的フレーズ: ${writing_style.characteristic_phrases.join("、")}`
+        }
+        if (writing_style.punctuation.uses_emoji) {
+            prompt += `\n- 絵文字を適度に使用`
+        }
+        if (writing_style.punctuation.uses_exclamation) {
+            prompt += `\n- 感嘆符（！）を使用`
+        }
+    }
+
+    // 実際の文章サンプル
+    if (style_samples.length > 0) {
+        prompt += `\n\n## 参考文章（この人の実際の書き方）`
+        for (const sample of style_samples.slice(0, 3)) {
+            prompt += `\n「${sample}」`
+        }
+    }
+
     if (context) {
         prompt += `\n\n## 参考情報（RAG）\n以下の情報を参考にして回答してください:\n\n${context}`
     }
@@ -89,10 +113,14 @@ function buildSystemPrompt(persona: Persona | null, context: string): string {
     prompt += `\n\n## 応答ルール（厳守）
 1. 顧客への返答を1-2文で書く
 2. 返答を書き終えたら、shouldContinue ツールを呼び出す（テキストで説明しない）
+3. shouldContinue で have_more_to_say: true を返した場合、ツール結果を受け取ったら次の話題について新しいメッセージを書く
 
 shouldContinue ツールのパラメータ:
 - have_more_to_say: 続けて話したいなら true、終わりなら false
 - next_topic: 次の話題（なければ「なし」）
+
+## 継続時の動作
+ツール結果で「続けてください」と指示されたら、新しい短いメッセージを書いてください。各メッセージは独立した吹き出しとして表示されます。
 
 ## 禁止事項
 - ツールについてテキストで説明しない
@@ -100,7 +128,7 @@ shouldContinue ツールのパラメータ:
 - 長文を書かない（1-2文まで）
 
 ## 応答スタイル
-- 自然な会話調（「〜ですね」「〜かな」）
+- 上記の文体ガイドに従って自然に話す
 - アーティストらしい個性を持って対応
 - わからないことは「確認します」と伝える`
 
@@ -118,15 +146,31 @@ export default defineEventHandler(async (event: H3Event) => {
 
     const db = getFirestoreInstance()
 
-    // CAG: キャッシュからペルソナとRAGサマリーを取得
+    // SSE ストリームを先に作成（タイミング情報を送信するため）
+    const event_stream = createEventStream(event)
+
+    // タイミング送信ヘルパー
+    const sendTiming = (category: "CAG" | "RAG" | "LLM" | "TOOL", duration: number) => {
+        event_stream.push({
+            event: "timing",
+            data: JSON.stringify({ category, duration })
+        })
+    }
+
+    // CAG: キャッシュからペルソナ・RAGサマリー・口調分析を取得
+    const cag_start = Date.now()
     let persona: Persona | null = null
     let rag_summary = ""
+    let writing_style: WritingStyle | null = null
+    let style_samples: string[] = []
     const cached = await getCache(body.bucket)
 
     if (cached) {
         console.log("CAG: Using cached context (Redis)")
         persona = cached.persona
         rag_summary = cached.rag_summary
+        writing_style = cached.writing_style
+        style_samples = cached.style_samples || []
     } else {
         console.log("CAG: Building and caching context")
         try {
@@ -138,13 +182,24 @@ export default defineEventHandler(async (event: H3Event) => {
             console.error("Failed to load persona:", e)
         }
 
-        rag_summary = await buildRagSummary(db, body.bucket)
-        await setCache(body.bucket, persona, rag_summary)
+        // RAGサマリーと口調分析を並列で構築
+        const [rag_result, style_result] = await Promise.all([
+            buildRagSummary(db, body.bucket),
+            buildStyleAnalysis(db, body.bucket)
+        ])
+
+        rag_summary = rag_result
+        writing_style = style_result.writing_style
+        style_samples = style_result.style_samples
+
+        await setCache(body.bucket, persona, rag_summary, writing_style, style_samples)
     }
+    sendTiming("CAG", Date.now() - cag_start)
 
     // リアルタイムRAG
     let realtime_context = ""
     if (!shouldSkipRealtimeRag(body.message)) {
+        const rag_start = Date.now()
         console.log("Realtime RAG: Searching...")
         try {
             const query_embedding = await generateEmbedding(body.message)
@@ -163,6 +218,7 @@ export default defineEventHandler(async (event: H3Event) => {
         } catch (e) {
             console.error("RAG search failed:", e)
         }
+        sendTiming("RAG", Date.now() - rag_start)
     }
 
     // コンテキストを結合
@@ -174,7 +230,12 @@ export default defineEventHandler(async (event: H3Event) => {
         context += `### 関連情報（RAG）\n${realtime_context}`
     }
 
-    const system_prompt = buildSystemPrompt(persona, context)
+    const system_prompt = buildSystemPrompt({
+        persona,
+        context,
+        writing_style,
+        style_samples
+    })
 
     // セッション管理
     let session_id = body.session_id
@@ -236,11 +297,17 @@ export default defineEventHandler(async (event: H3Event) => {
     const model = persona?.provider || AIProvider.CLAUDE_SONNET
     console.log("Using model:", model, "(streaming)")
 
-    // SSE ストリームを作成
-    const event_stream = createEventStream(event)
+    // エージェントイベント送信ヘルパー
+    const sendAgentEvent = (message: string) => {
+        event_stream.push({
+            event: "agent",
+            data: JSON.stringify({ message })
+        })
+    }
 
     // メッセージ収集用
     const collected_messages: string[] = []
+    let llm_start = 0
 
     // ストリーミングコールバック
     const callbacks: StreamCallbacks = {
@@ -257,7 +324,17 @@ export default defineEventHandler(async (event: H3Event) => {
                 data: JSON.stringify({ message })
             })
         },
+        onToolCall: (tool_name: string) => {
+            sendAgentEvent(`ツール呼び出し：${tool_name}`)
+            sendTiming("TOOL", 0) // ツール自体の実行時間は瞬時
+        },
         onDone: async () => {
+            // LLMタイミングを送信
+            if (llm_start > 0) {
+                sendTiming("LLM", Date.now() - llm_start)
+            }
+            sendAgentEvent("生成完了")
+
             // メッセージをFirestoreに保存
             for (const msg of collected_messages) {
                 await messages_ref.add({
@@ -307,6 +384,10 @@ export default defineEventHandler(async (event: H3Event) => {
         event: "session",
         data: JSON.stringify({ session_id })
     })
+
+    // 生成開始イベント
+    sendAgentEvent("生成を開始")
+    llm_start = Date.now()
 
     // ストリーミング会話を開始（Anthropic SDK）
     const anthropic = getAnthropicSDKClient()
