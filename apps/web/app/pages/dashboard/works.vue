@@ -38,7 +38,6 @@ const is_editing = ref(false)
 const message = ref("")
 const message_type = ref<"success" | "error">("success")
 
-// 編集用
 const edit_modal_open = ref(false)
 const editing_work = ref<Work | null>(null)
 const edit_form = ref({
@@ -206,6 +205,13 @@ async function handleEditSubmit() {
     }
 }
 
+const status_labels: Record<string, string> = {
+    available: "販売中",
+    reserved: "売約済",
+    sold: "売却済",
+    unavailable: "非売品"
+}
+
 onMounted(() => {
     auth.initializeFromStorage()
     if (auth.bucket.value) {
@@ -221,213 +227,241 @@ watch(() => auth.bucket.value, (newBucket) => {
 </script>
 
 <template>
-    <div class="container mx-auto py-8">
-        <div class="space-y-6">
-            <div class="flex items-center gap-4">
-                <NuxtLink to="/dashboard">
-                    <UiButton variant="ghost" size="sm">← 戻る</UiButton>
-                </NuxtLink>
-                <h1 class="text-3xl font-bold">作品管理</h1>
+    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <AppHeader title="Works" back-to="/dashboard" />
+
+        <main class="max-w-screen-2xl mx-auto px-6 lg:px-8 py-8">
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Works</h1>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    作品ポートフォリオを管理します
+                </p>
             </div>
 
-            <!-- 作品一覧 -->
-            <UiCard v-if="works.length > 0">
-                <UiCardHeader>
-                    <UiCardTitle>登録済み作品</UiCardTitle>
-                </UiCardHeader>
-                <UiCardContent>
-                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- 左カラム: 作品一覧 -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div v-if="is_fetching" class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-12 text-center">
+                        <div class="w-8 h-8 border-2 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <p class="text-sm text-zinc-500">Loading...</p>
+                    </div>
+
+                    <div v-else-if="works.length === 0" class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-12 text-center">
+                        <div class="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">No works yet</h3>
+                        <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                            右のフォームから作品を登録してください
+                        </p>
+                    </div>
+
+                    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div
                             v-for="work in works"
                             :key="work.id"
-                            class="border rounded-lg overflow-hidden"
+                            class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:shadow-md transition-shadow"
                         >
                             <img
                                 :src="work.url"
                                 :alt="work.title"
-                                class="w-full h-40 object-cover"
+                                class="w-full h-48 object-cover"
                             />
-                            <div class="p-3">
-                                <h3 class="font-medium truncate">{{ work.title }}</h3>
-                                <p class="text-sm text-muted-foreground">{{ work.status }}</p>
-                                <div class="flex gap-2 mt-2">
-                                    <UiButton
-                                        variant="outline"
-                                        size="sm"
+                            <div class="p-4">
+                                <div class="flex items-start justify-between mb-2">
+                                    <h3 class="font-semibold text-zinc-900 dark:text-zinc-100 truncate flex-1">{{ work.title }}</h3>
+                                    <span
+                                        :class="[
+                                            'ml-2 px-2 py-0.5 text-xs rounded-full',
+                                            work.status === 'available' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                            work.status === 'sold' ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' :
+                                            'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                        ]"
+                                    >
+                                        {{ status_labels[work.status] || work.status }}
+                                    </span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button
                                         @click="openEditModal(work)"
+                                        class="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-sm font-medium transition-colors"
                                     >
-                                        編集
-                                    </UiButton>
-                                    <UiButton
-                                        variant="destructive"
-                                        size="sm"
+                                        Edit
+                                    </button>
+                                    <button
                                         @click="handleDelete(work.id)"
+                                        class="px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium transition-colors"
                                     >
-                                        削除
-                                    </UiButton>
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </UiCardContent>
-            </UiCard>
+                </div>
 
-            <!-- 新規登録フォーム -->
-            <UiCard>
-                <UiCardHeader>
-                    <UiCardTitle>新規作品登録</UiCardTitle>
-                    <UiCardDescription>
-                        作品の情報を入力してください
-                    </UiCardDescription>
-                </UiCardHeader>
-                <UiCardContent>
-                    <div class="space-y-4">
-                        <div class="space-y-2">
-                            <UiLabel for="work-file">作品ファイル</UiLabel>
-                            <input
-                                type="file"
-                                id="work-file"
-                                accept=".jpg,.jpeg,.png,.wav,.mp4"
-                                class="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-                                @change="handleFileChange"
-                            />
+                <!-- 右カラム: 新規登録フォーム -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden sticky top-24">
+                        <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-violet-600 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 class="font-semibold text-zinc-900 dark:text-zinc-100">New Work</h2>
+                                    <p class="text-xs text-zinc-500">作品を登録</p>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="space-y-2">
-                            <UiLabel for="title">タイトル</UiLabel>
-                            <UiInput id="title" v-model="form.title" placeholder="作品タイトル" />
-                        </div>
+                        <div class="p-6 space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Image</label>
+                                <input
+                                    type="file"
+                                    id="work-file"
+                                    accept=".jpg,.jpeg,.png"
+                                    class="block w-full text-sm text-zinc-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-violet-100 file:text-violet-700 dark:file:bg-violet-900/30 dark:file:text-violet-400 hover:file:bg-violet-200 dark:hover:file:bg-violet-900/50 cursor-pointer"
+                                    @change="handleFileChange"
+                                />
+                            </div>
 
-                        <div class="space-y-2">
-                            <UiLabel for="date">作成日</UiLabel>
-                            <UiInput id="date" type="date" v-model="form.date" />
-                        </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Title</label>
+                                <input
+                                    v-model="form.title"
+                                    type="text"
+                                    placeholder="作品タイトル"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                />
+                            </div>
 
-                        <div class="space-y-2">
-                            <UiLabel for="worktype">作品種別</UiLabel>
-                            <select
-                                id="worktype"
-                                v-model="form.worktype"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Date</label>
+                                <input
+                                    v-model="form.date"
+                                    type="date"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                />
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Type</label>
+                                <select
+                                    v-model="form.worktype"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                >
+                                    <option value="personal">自主制作</option>
+                                    <option value="client">クライアントワーク</option>
+                                </select>
+                            </div>
+
+                            <div v-if="form.worktype === 'client'" class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Client</label>
+                                <input
+                                    v-model="form.client"
+                                    type="text"
+                                    placeholder="クライアント名"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                />
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</label>
+                                <select
+                                    v-model="form.status"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                >
+                                    <option value="available">販売中</option>
+                                    <option value="reserved">売約済</option>
+                                    <option value="sold">売却済</option>
+                                    <option value="unavailable">非売品</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Description</label>
+                                <textarea
+                                    v-model="form.description"
+                                    placeholder="作品の説明"
+                                    rows="2"
+                                    class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                />
+                            </div>
+
+                            <button
+                                @click="handleSubmit"
+                                :disabled="!form.file || !form.title || is_loading || !auth.is_configured.value"
+                                class="w-full px-4 py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white rounded-xl font-medium text-sm transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                <option value="personal">自主制作</option>
-                                <option value="client">クライアントワーク</option>
-                            </select>
-                        </div>
+                                <svg v-if="is_loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                {{ is_loading ? 'Uploading...' : 'Add Work' }}
+                            </button>
 
-                        <div v-if="form.worktype === 'client'" class="space-y-2">
-                            <UiLabel for="client">クライアント名</UiLabel>
-                            <UiInput id="client" v-model="form.client" placeholder="クライアント名" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <UiLabel for="status">販売状況</UiLabel>
-                            <select
-                                id="status"
-                                v-model="form.status"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            <div
+                                v-if="message"
+                                :class="[
+                                    'p-3 rounded-lg text-sm',
+                                    message_type === 'error'
+                                        ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                        : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                                ]"
                             >
-                                <option value="available">販売中</option>
-                                <option value="reserved">売約済</option>
-                                <option value="sold">売却済</option>
-                                <option value="unavailable">非売品</option>
-                            </select>
+                                {{ message }}
+                            </div>
                         </div>
-
-                        <div class="space-y-2">
-                            <UiLabel for="description">説明</UiLabel>
-                            <textarea
-                                id="description"
-                                v-model="form.description"
-                                placeholder="作品の説明"
-                                rows="3"
-                                class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            />
-                        </div>
-
-                        <div class="space-y-2">
-                            <UiLabel for="story">制作ストーリー</UiLabel>
-                            <textarea
-                                id="story"
-                                v-model="form.story"
-                                placeholder="制作の背景やストーリー"
-                                rows="3"
-                                class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            />
-                        </div>
-
-                        <UiButton
-                            @click="handleSubmit"
-                            :disabled="!form.file || !form.title || is_loading || !auth.is_configured.value"
-                            :loading="is_loading"
-                        >
-                            登録
-                        </UiButton>
-
-                        <UiAlert v-if="message" :variant="message_type === 'error' ? 'destructive' : 'default'">
-                            {{ message }}
-                        </UiAlert>
                     </div>
-                </UiCardContent>
-            </UiCard>
-        </div>
+                </div>
+            </div>
+        </main>
 
         <!-- 編集モーダル -->
         <div
             v-if="edit_modal_open"
-            class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
             @click.self="closeEditModal"
         >
-            <div class="bg-background rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold">作品を編集</h2>
-                    <button @click="closeEditModal" class="text-muted-foreground hover:text-foreground">
-                        ✕
+            <div class="bg-white dark:bg-zinc-900 rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+                <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Edit Work</h2>
+                    <button @click="closeEditModal" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
-                <div class="space-y-4">
-                    <div v-if="editing_work" class="mb-4">
+                <div class="p-6 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+                    <div v-if="editing_work">
                         <img
                             :src="editing_work.url"
                             :alt="editing_work.title"
-                            class="w-full h-40 object-cover rounded-md"
+                            class="w-full h-40 object-cover rounded-lg mb-4"
                         />
                     </div>
 
                     <div class="space-y-2">
-                        <UiLabel for="edit-title">タイトル</UiLabel>
-                        <UiInput id="edit-title" v-model="edit_form.title" placeholder="作品タイトル" />
+                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Title</label>
+                        <input
+                            v-model="edit_form.title"
+                            type="text"
+                            class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
                     </div>
 
                     <div class="space-y-2">
-                        <UiLabel for="edit-date">作成日</UiLabel>
-                        <UiInput id="edit-date" type="date" v-model="edit_form.date" />
-                    </div>
-
-                    <div class="space-y-2">
-                        <UiLabel for="edit-worktype">作品種別</UiLabel>
+                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</label>
                         <select
-                            id="edit-worktype"
-                            v-model="edit_form.worktype"
-                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                            <option value="personal">自主制作</option>
-                            <option value="client">クライアントワーク</option>
-                        </select>
-                    </div>
-
-                    <div v-if="edit_form.worktype === 'client'" class="space-y-2">
-                        <UiLabel for="edit-client">クライアント名</UiLabel>
-                        <UiInput id="edit-client" v-model="edit_form.client" placeholder="クライアント名" />
-                    </div>
-
-                    <div class="space-y-2">
-                        <UiLabel for="edit-status">販売状況</UiLabel>
-                        <select
-                            id="edit-status"
                             v-model="edit_form.status"
-                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                         >
                             <option value="available">販売中</option>
                             <option value="reserved">売約済</option>
@@ -437,39 +471,33 @@ watch(() => auth.bucket.value, (newBucket) => {
                     </div>
 
                     <div class="space-y-2">
-                        <UiLabel for="edit-description">説明</UiLabel>
+                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Description</label>
                         <textarea
-                            id="edit-description"
                             v-model="edit_form.description"
-                            placeholder="作品の説明"
                             rows="3"
-                            class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                         />
                     </div>
+                </div>
 
-                    <div class="space-y-2">
-                        <UiLabel for="edit-story">制作ストーリー</UiLabel>
-                        <textarea
-                            id="edit-story"
-                            v-model="edit_form.story"
-                            placeholder="制作の背景やストーリー"
-                            rows="3"
-                            class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        />
-                    </div>
-
-                    <div class="flex gap-2 justify-end">
-                        <UiButton variant="outline" @click="closeEditModal">
-                            キャンセル
-                        </UiButton>
-                        <UiButton
-                            @click="handleEditSubmit"
-                            :disabled="!edit_form.title || is_editing"
-                            :loading="is_editing"
-                        >
-                            保存
-                        </UiButton>
-                    </div>
+                <div class="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 flex gap-3 justify-end">
+                    <button
+                        @click="closeEditModal"
+                        class="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        @click="handleEditSubmit"
+                        :disabled="!edit_form.title || is_editing"
+                        class="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-300 text-white rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        <svg v-if="is_editing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Save
+                    </button>
                 </div>
             </div>
         </div>

@@ -122,139 +122,180 @@ watch(() => auth.bucket.value, (newBucket) => {
 </script>
 
 <template>
-    <div class="container mx-auto py-8">
-        <div class="space-y-6">
-            <div class="flex items-center gap-4">
-                <NuxtLink to="/dashboard">
-                    <UiButton variant="ghost" size="sm">← 戻る</UiButton>
-                </NuxtLink>
-                <h1 class="text-3xl font-bold">ペルソナ設定</h1>
+    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <AppHeader title="Persona" back-to="/dashboard" />
+
+        <main class="max-w-screen-2xl mx-auto px-6 lg:px-8 py-8">
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Persona Settings</h1>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    AIエージェントのキャラクターと話し方を定義します
+                </p>
             </div>
 
-            <UiCard>
-                <UiCardHeader>
-                    <UiCardTitle>エージェントの性格を定義</UiCardTitle>
-                    <UiCardDescription>
-                        AIエージェントがどのように振る舞うかを設定します
-                    </UiCardDescription>
-                </UiCardHeader>
-                <UiCardContent>
-                    <div class="space-y-4">
-                        <div class="space-y-2">
-                            <UiLabel for="provider">AIモデル</UiLabel>
+            <div class="max-w-2xl">
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-violet-600 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-zinc-900 dark:text-zinc-100">Agent Persona</h2>
+                                <p class="text-xs text-zinc-500">Define character and behavior</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 space-y-6">
+                        <!-- AI Model Selection -->
+                        <div class="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
+                            <label class="block text-sm font-medium text-violet-900 dark:text-violet-100 mb-2">
+                                AI Model
+                            </label>
                             <select
-                                id="provider"
                                 v-model="form.provider"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                class="w-full px-4 py-2.5 bg-white dark:bg-zinc-800 border border-violet-200 dark:border-violet-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                             >
                                 <option :value="AIProvider.CLAUDE_SONNET">Claude Sonnet 4.5 (推奨・高速)</option>
                                 <option :value="AIProvider.CLAUDE_OPUS">Claude Opus 4.5 (最高品質)</option>
                             </select>
-                            <p class="text-xs text-muted-foreground">
-                                Sonnet: 高速で実用的な応答（推奨）。Opus: より高品質だが低速・高コスト。
+                            <p class="mt-2 text-xs text-violet-600 dark:text-violet-400">
+                                Sonnet: 高速で実用的な応答。Opus: より高品質だが低速・高コスト。
                             </p>
                         </div>
 
-                        <div class="border-t pt-4"></div>
+                        <div class="border-t border-zinc-200 dark:border-zinc-700" />
 
+                        <!-- Character Name -->
                         <div class="space-y-2">
-                            <UiLabel for="character">キャラクター名（任意）</UiLabel>
-                            <UiInput
-                                id="character"
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Character Name <span class="text-zinc-400">(optional)</span>
+                            </label>
+                            <input
                                 v-model="form.character"
+                                type="text"
                                 placeholder="例: アートくん"
+                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                             />
                         </div>
 
+                        <!-- Motif -->
                         <div class="space-y-2">
-                            <UiLabel for="motif">モチーフ</UiLabel>
-                            <UiInput
-                                id="motif"
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Motif <span class="text-red-500">*</span>
+                            </label>
+                            <input
                                 v-model="form.motif"
+                                type="text"
                                 placeholder="例: カエル、猫、宇宙人"
+                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                             />
                         </div>
 
+                        <!-- Philosophy -->
                         <div class="space-y-2">
-                            <UiLabel for="philosophy">創作哲学</UiLabel>
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Creative Philosophy
+                            </label>
                             <textarea
-                                id="philosophy"
                                 v-model="form.philosophy"
                                 placeholder="あなたの創作に対する考え方や信念"
                                 rows="3"
-                                class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                             />
                         </div>
 
+                        <!-- Influences -->
                         <div class="space-y-2">
-                            <UiLabel for="influences">影響を受けた作家・文化</UiLabel>
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Influences
+                            </label>
                             <textarea
-                                id="influences"
                                 v-model="form.influences"
                                 placeholder="カンマ区切りで入力（例: 岡本太郎, バスキア, 日本の伝統文化）"
                                 rows="2"
-                                class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                             />
                         </div>
 
+                        <!-- Avoidances -->
                         <div class="space-y-2">
-                            <UiLabel for="avoidances">避けるべきトピック</UiLabel>
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Topics to Avoid
+                            </label>
                             <textarea
-                                id="avoidances"
                                 v-model="form.avoidances"
                                 placeholder="カンマ区切りで入力（例: 政治, 宗教批判）"
                                 rows="2"
-                                class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                             />
                         </div>
 
-                        <div class="border-t pt-4 space-y-4">
-                            <h3 class="font-medium">理想的な応答例</h3>
+                        <div class="border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                            <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Sample Response</h3>
 
-                            <div class="space-y-2">
-                                <UiLabel for="sample_situation">状況説明</UiLabel>
-                                <UiInput
-                                    id="sample_situation"
-                                    v-model="form.sample_situation"
-                                    placeholder="例: 顧客が作品の価格について質問したとき"
-                                />
-                            </div>
+                            <div class="space-y-4">
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Situation</label>
+                                    <input
+                                        v-model="form.sample_situation"
+                                        type="text"
+                                        placeholder="例: 顧客が作品の価格について質問したとき"
+                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+                                </div>
 
-                            <div class="space-y-2">
-                                <UiLabel for="sample_message">顧客の発言例</UiLabel>
-                                <UiInput
-                                    id="sample_message"
-                                    v-model="form.sample_message"
-                                    placeholder="例: この絵はいくらですか？"
-                                />
-                            </div>
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Customer Message</label>
+                                    <input
+                                        v-model="form.sample_message"
+                                        type="text"
+                                        placeholder="例: この絵はいくらですか？"
+                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+                                </div>
 
-                            <div class="space-y-2">
-                                <UiLabel for="sample_response">理想的な応答</UiLabel>
-                                <textarea
-                                    id="sample_response"
-                                    v-model="form.sample_response"
-                                    placeholder="例: ご興味いただきありがとうございます！..."
-                                    rows="3"
-                                    class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                />
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Ideal Response</label>
+                                    <textarea
+                                        v-model="form.sample_response"
+                                        placeholder="例: ご興味いただきありがとうございます！..."
+                                        rows="3"
+                                        class="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <UiButton
+                        <button
                             @click="handleSubmit"
                             :disabled="!form.motif || is_loading || !auth.is_configured.value"
-                            :loading="is_loading"
+                            class="w-full px-4 py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white rounded-xl font-medium text-sm transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
-                            保存
-                        </UiButton>
+                            <svg v-if="is_loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ is_loading ? 'Saving...' : 'Save Persona' }}
+                        </button>
 
-                        <UiAlert v-if="message" :variant="message_type === 'error' ? 'destructive' : 'default'">
+                        <div
+                            v-if="message"
+                            :class="[
+                                'p-4 rounded-lg text-sm',
+                                message_type === 'error'
+                                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800'
+                                    : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                            ]"
+                        >
                             {{ message }}
-                        </UiAlert>
+                        </div>
                     </div>
-                </UiCardContent>
-            </UiCard>
-        </div>
+                </div>
+            </div>
+        </main>
     </div>
 </template>
