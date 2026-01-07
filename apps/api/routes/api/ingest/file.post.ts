@@ -22,7 +22,7 @@ import { invalidateCache, InvalidationType } from "~/utils/cag"
 import { invalidateVectorCache } from "~/utils/vector-cache"
 import { success, validationError, serverError } from "~/utils/response"
 import { LOG, ERROR, SourceType } from "@egographica/shared"
-import type { VectorMetadata, VectorUpsert, Persona } from "@egographica/shared"
+import type { VectorMetadata, VectorUpsert, Persona, ImageAnalysis } from "@egographica/shared"
 
 const ALLOWED_TYPES = {
     "application/pdf": "pdf",
@@ -122,7 +122,7 @@ export default defineEventHandler(async (event: H3Event) => {
             )
             data_urls.text = text_url
 
-            // 埋め込み画像をPNGとしてアップロード
+            // 埋め込み画像をPNGとしてアップロードし、Claude Visionで解析してAssetsに保存
             for (let i = 0; i < images.length; i++) {
                 const image_url = await uploadToStorage(
                     storage_bucket,
@@ -131,6 +131,31 @@ export default defineEventHandler(async (event: H3Event) => {
                     "image/png"
                 )
                 data_urls[`image_${i + 1}`] = image_url
+
+                // Claude Visionで画像を解析
+                try {
+                    const base64 = bufferToBase64(images[i], "image/png")
+                    const analysis = await analyzeImage(base64, "image/png")
+
+                    // Assetsコレクションに保存
+                    const asset_ref = db.collection(bucket).doc("assets").collection("items").doc()
+                    await asset_ref.set({
+                        id: asset_ref.id,
+                        url: image_url,
+                        filename: `${filename}-page${i + 1}.png`,
+                        mimetype: "image/png",
+                        source: "pdf-extracted",
+                        source_file_id: file_id,
+                        source_filename: filename,
+                        page_number: i + 1,
+                        analysis,
+                        created: FieldValue.serverTimestamp()
+                    })
+
+                    console.log(`Asset saved from PDF: ${asset_ref.id}`)
+                } catch (e) {
+                    console.error(`Failed to analyze PDF image ${i + 1}:`, e)
+                }
             }
 
         } else if (file_ext === "jpg" || file_ext === "png") {
@@ -148,6 +173,20 @@ export default defineEventHandler(async (event: H3Event) => {
                 "application/json"
             )
             data_urls.analysis = json_url
+
+            // Assetsコレクションに保存
+            const asset_ref = db.collection(bucket).doc("assets").collection("items").doc()
+            await asset_ref.set({
+                id: asset_ref.id,
+                url: raw_url,
+                filename,
+                mimetype: content_type,
+                source: "uploaded",
+                analysis,
+                created: FieldValue.serverTimestamp()
+            })
+
+            console.log(`Asset saved: ${asset_ref.id}`)
 
         } else if (file_ext === "mp3" || file_ext === "m4a" || file_ext === "wav") {
             // 音声: Whisperで文字起こし
