@@ -5,11 +5,11 @@ const { logs, formatLogEntry, clearLogs } = useActivityLog()
 
 const log_container = ref<HTMLElement | null>(null)
 
-// flex-col-reverseを使用するため、scrollTopを0にする
+// 新しいログが追加されたら一番下にスクロール
 watch(() => logs.value.length, async () => {
     await nextTick()
     if (log_container.value) {
-        log_container.value.scrollTop = 0
+        log_container.value.scrollTop = log_container.value.scrollHeight
     }
 })
 </script>
@@ -36,7 +36,7 @@ watch(() => logs.value.length, async () => {
                 <p class="text-xs text-zinc-400">No activity</p>
             </div>
 
-            <div v-else class="flex flex-col-reverse gap-1">
+            <div v-else class="flex flex-col gap-1">
                 <div
                     v-for="entry in logs"
                     :key="entry.id"
