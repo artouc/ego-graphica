@@ -196,9 +196,9 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+    <div class="h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col overflow-hidden">
         <!-- Header -->
-        <header class="h-12 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4">
+        <header class="h-12 flex-shrink-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4">
             <div class="flex items-center gap-4 flex-1">
                 <NuxtLink to="/dashboard" class="flex items-center gap-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,11 +216,11 @@ onMounted(() => {
         </header>
 
         <!-- Main -->
-        <div class="flex-1 flex overflow-hidden">
+        <div class="flex-1 flex overflow-hidden min-h-0">
             <!-- Chat Panel -->
-            <div class="flex-1 flex flex-col">
+            <div class="flex-1 flex flex-col min-w-0">
                 <!-- Messages -->
-                <div ref="messages_container" class="flex-1 overflow-y-auto p-4 space-y-3">
+                <div ref="messages_container" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     <div v-if="messages.length === 0" class="h-full flex items-center justify-center">
                         <div class="text-center">
                             <svg class="w-8 h-8 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,7 +274,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Input -->
-                <div class="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <div class="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
                     <div class="flex items-center gap-2 max-w-3xl mx-auto">
                         <input
                             v-model="input"
