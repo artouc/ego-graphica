@@ -5,10 +5,11 @@ const { logs, formatLogEntry, clearLogs } = useActivityLog()
 
 const log_container = ref<HTMLElement | null>(null)
 
+// flex-col-reverseを使用するため、scrollTopを0にする
 watch(() => logs.value.length, async () => {
     await nextTick()
     if (log_container.value) {
-        log_container.value.scrollTop = log_container.value.scrollHeight
+        log_container.value.scrollTop = 0
     }
 })
 </script>
@@ -16,7 +17,7 @@ watch(() => logs.value.length, async () => {
 <template>
     <div class="h-full flex flex-col overflow-hidden">
         <!-- Header -->
-        <div class="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+        <div class="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between flex-shrink-0">
             <div class="flex items-center gap-2">
                 <span class="text-xs font-medium text-zinc-900 dark:text-zinc-100">Activity</span>
                 <span class="text-[10px] text-zinc-400">{{ logs.length }}</span>
@@ -30,12 +31,12 @@ watch(() => logs.value.length, async () => {
         </div>
 
         <!-- Logs -->
-        <div ref="log_container" class="flex-1 overflow-auto p-2">
+        <div ref="log_container" class="flex-1 overflow-y-auto p-2 min-h-0">
             <div v-if="logs.length === 0" class="h-full flex items-center justify-center">
                 <p class="text-xs text-zinc-400">No activity</p>
             </div>
 
-            <div v-else class="space-y-1">
+            <div v-else class="flex flex-col-reverse gap-1">
                 <div
                     v-for="entry in logs"
                     :key="entry.id"

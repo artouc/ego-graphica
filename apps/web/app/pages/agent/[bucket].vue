@@ -15,8 +15,30 @@ const { addAgentLog, addSystemLog, clearLogs } = useActivityLog()
 const messages = ref<Array<{ role: "user" | "assistant"; content: string; streaming?: boolean }>>([])
 const input = ref("")
 const is_loading = ref(false)
+const is_typing = ref(false)
 const session_id = ref<string | null>(null)
 const messages_container = ref<HTMLElement | null>(null)
+let typing_timeout: ReturnType<typeof setTimeout> | null = null
+
+function showTypingWithDelay() {
+    // 既存のタイマーをクリア
+    if (typing_timeout) {
+        clearTimeout(typing_timeout)
+    }
+    // 300ms後に表示
+    typing_timeout = setTimeout(() => {
+        is_typing.value = true
+        scrollToBottom()
+    }, 300)
+}
+
+function cancelTyping() {
+    if (typing_timeout) {
+        clearTimeout(typing_timeout)
+        typing_timeout = null
+    }
+    is_typing.value = false
+}
 
 async function scrollToBottom() {
     await nextTick()
@@ -107,9 +129,15 @@ async function handleSend() {
 
                             case "agent":
                                 addAgentLog(data.message)
+                                // shouldContinueツール呼び出し時にタイピング表示（遅延付き）
+                                if (data.message.includes("shouldContinue")) {
+                                    showTypingWithDelay()
+                                }
                                 break
 
                             case "text_delta":
+                                // 新しいテキストが来たらタイピング表示をキャンセル
+                                cancelTyping()
                                 if (current_message_index === -1) {
                                     messages.value.push({
                                         role: "assistant",
@@ -133,9 +161,11 @@ async function handleSend() {
                                 break
 
                             case "done":
+                                cancelTyping()
                                 break
 
                             case "error":
+                                cancelTyping()
                                 messages.value.push({
                                     role: "assistant",
                                     content: "Error occurred. Please try again."
@@ -156,6 +186,7 @@ async function handleSend() {
         })
     } finally {
         is_loading.value = false
+        cancelTyping()
     }
 }
 
@@ -219,12 +250,24 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <div v-if="is_loading && messages[messages.length - 1]?.role !== 'assistant'" class="flex justify-start">
+                    <!-- Initial loading indicator -->
+                    <div v-if="is_loading && messages[messages.length - 1]?.role !== 'assistant' && !is_typing" class="flex justify-start">
                         <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 rounded-lg">
                             <div class="flex items-center gap-1">
                                 <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 0ms" />
                                 <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 150ms" />
                                 <div class="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style="animation-delay: 300ms" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Typing indicator (shouldContinue) -->
+                    <div v-if="is_typing" class="flex justify-start">
+                        <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 rounded-lg">
+                            <div class="flex items-center gap-1">
+                                <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
+                                <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style="animation-delay: 150ms" />
+                                <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style="animation-delay: 300ms" />
                             </div>
                         </div>
                     </div>
@@ -256,8 +299,8 @@ onMounted(() => {
             </div>
 
             <!-- Log Panel -->
-            <div class="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hidden lg:block">
-                <LogPanel class="h-full" />
+            <div class="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hidden lg:flex lg:flex-col overflow-hidden">
+                <LogPanel class="h-full min-h-0" />
             </div>
         </div>
     </div>
