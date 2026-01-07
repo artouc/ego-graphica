@@ -12,11 +12,9 @@ export function getRedisClient(): Redis {
         return redis_client
     }
 
-    const config = useRuntimeConfig()
-
     redis_client = new Redis({
-        url: config.upstashRedisRestUrl,
-        token: config.upstashRedisRestToken
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN
     })
 
     return redis_client

@@ -14,10 +14,8 @@ export function getAnthropicClient(): ReturnType<typeof createAnthropic> {
         return anthropic_client
     }
 
-    const config = useRuntimeConfig()
-
     anthropic_client = createAnthropic({
-        apiKey: config.anthropicApiKey
+        apiKey: process.env.ANTHROPIC_API_KEY
     })
 
     return anthropic_client
@@ -29,10 +27,8 @@ export function getAnthropicSDKClient(): Anthropic {
         return anthropic_sdk_client
     }
 
-    const config = useRuntimeConfig()
-
     anthropic_sdk_client = new Anthropic({
-        apiKey: config.anthropicApiKey
+        apiKey: process.env.ANTHROPIC_API_KEY
     })
 
     return anthropic_sdk_client

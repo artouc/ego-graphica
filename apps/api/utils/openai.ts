@@ -16,10 +16,8 @@ function getOpenAIClient(): ReturnType<typeof createOpenAI> {
         return openai_client
     }
 
-    const config = useRuntimeConfig()
-
     openai_client = createOpenAI({
-        apiKey: config.openaiApiKey
+        apiKey: process.env.OPENAI_API_KEY
     })
 
     return openai_client

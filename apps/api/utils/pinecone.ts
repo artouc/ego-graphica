@@ -17,10 +17,8 @@ export function initializePinecone(): Pinecone {
 
     console.log(LOG.PINECONE.INITIALIZING)
 
-    const config = useRuntimeConfig()
-
     pinecone_client = new Pinecone({
-        apiKey: config.pineconeApiKey
+        apiKey: process.env.PINECONE_API_KEY
     })
 
     console.log(LOG.PINECONE.INITIALIZED)
@@ -35,9 +33,8 @@ export function getPineconeIndex(): Index {
     }
 
     const client = initializePinecone()
-    const config = useRuntimeConfig()
 
-    pinecone_index = client.index(config.pineconeIndex)
+    pinecone_index = client.index(process.env.PINECONE_INDEX as string)
     console.log(LOG.PINECONE.INDEX_CONNECTED)
 
     return pinecone_index

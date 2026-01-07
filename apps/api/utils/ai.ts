@@ -176,8 +176,6 @@ export async function transcribeAudio(
 ): Promise<string> {
     console.log(LOG.AI.AUDIO_TRANSCRIBING)
 
-    const config = useRuntimeConfig()
-
     const formData = new FormData()
     const blob = new Blob([audioBuffer])
     formData.append("file", blob, filename)
@@ -187,7 +185,7 @@ export async function transcribeAudio(
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
         headers: {
-            "Authorization": `Bearer ${config.openaiApiKey}`
+            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: formData
     })

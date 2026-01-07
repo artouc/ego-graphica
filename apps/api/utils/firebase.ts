@@ -27,13 +27,6 @@ export function initializeFirebase(): App {
 
     console.log(LOG.FIREBASE.INITIALIZING)
 
-    console.log("DEBUG Firebase env vars:", {
-        hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
-        hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
-        hasPrivateKeyBase64: !!process.env.FIREBASE_PRIVATE_KEY_BASE64,
-        privateKeyBase64Length: process.env.FIREBASE_PRIVATE_KEY_BASE64?.length
-    })
-
     const private_key = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_BASE64 as string, "base64").toString("utf-8")
 
     firebase_app = initializeApp({
